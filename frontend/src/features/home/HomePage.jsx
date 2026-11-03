@@ -18,7 +18,6 @@ import ProjectGrid from './ProjectGrid';
 import ProjectListView from './ProjectListView';
 import ProjectCompactView from './ProjectCompactView';
 import ProjectScroll from './ProjectScroll';
-import ProjectSidebar from './ProjectSidebar';
 import CreateProjectModal from './CreateProjectModal';
 import JoinProjectModal from '../../components/ui/JoinProjectModal';
 import { useAuth } from '../auth/hooks/useAuth';
@@ -50,7 +49,6 @@ const METRICS = [
 ];
 
 const HomePage = () => {
-  const [selectedProject, setSelectedProject] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -99,7 +97,7 @@ const HomePage = () => {
     setSearchQuery?.('');
   };
 
-  const openProject = (project) => setSelectedProject(project);
+  const openProject = (project) => navigate(`/project/${project.id}/sprints`);
 
   return (
     <div className="ps-page flex h-full min-h-0 flex-col px-4 py-5 md:px-6 lg:px-8">
@@ -324,13 +322,6 @@ const HomePage = () => {
         )}
       </ProjectScroll>
 
-      <ProjectSidebar
-        project={selectedProject}
-        onClose={() => setSelectedProject(null)}
-        onViewSprints={() => {
-          if (selectedProject) navigate(`/project/${selectedProject.id}/sprints`);
-        }}
-      />
       <CreateProjectModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}

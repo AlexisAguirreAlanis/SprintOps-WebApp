@@ -60,6 +60,7 @@
   }
 
   .app-panel {
+    position: relative;
     border-top-left-radius: 28px;
   }
 
@@ -947,6 +948,79 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
   inset: 0;
   background: color-mix(in srgb, var(--app-accent) 22%, transparent);
   pointer-events: none;
+}
+
+.ps-settings-view {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  overflow: auto;
+  background: var(--app-bg);
+  color: var(--app-text);
+}
+
+.ps-settings-view .ps-progress {
+  height: 12px;
+}
+
+.ps-settings-cover {
+  position: relative;
+  height: 240px;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.ps-settings-cover > .ps-cover {
+  position: absolute;
+  inset: 0;
+}
+
+.ps-settings-cover-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px;
+  background: linear-gradient(to top, rgb(0 0 0 / 48%), transparent);
+}
+
+.ps-settings-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ps-settings-cover-btn:hover,
+.ps-settings-cover-btn:focus-visible {
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
+}
+
+.ps-settings-cover-btn:disabled {
+  opacity: 0.55;
+}
+
+.ps-settings-input {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  padding: 12px 14px;
+  outline: none;
+}
+
+.ps-settings-input:focus {
+  border-color: var(--app-accent);
 }
 
 .ps-cover {

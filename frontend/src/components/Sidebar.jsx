@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChartColumn, ChevronLeft, CircleUser, Folder, LogOut, Palette, Settings, X } from 'lucide-react';
+import { ChartColumn, ChevronLeft, CircleUser, House, LogOut, Palette, Settings, X } from 'lucide-react';
 import Avatar from './Avatar';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useDismiss } from '../features/home/useDismiss';
 
 const MAIN = [
-  { to: '/home', label: 'Proyectos', icon: Folder, match: ['/home', '/projects'] },
+  { to: '/home', label: 'Inicio', icon: House, match: ['/home', '/projects'] },
 ];
 
 const SETTINGS = [
