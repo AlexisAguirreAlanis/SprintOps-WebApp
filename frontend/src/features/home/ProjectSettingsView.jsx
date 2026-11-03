@@ -201,21 +201,35 @@ const ProjectSettingsView = ({ project, userId, onClose, onUpdated }) => {
   if (!host) return null;
 
   return createPortal(
-    <div className="ps-settings-view" role="dialog" aria-modal="true" aria-labelledby="project-settings-title">
+    <div
+      className="ps-settings-view"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="project-settings-title"
+      onClick={(event) => event.stopPropagation()}
+    >
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-5 py-6 sm:px-8 sm:py-8">
         <div className="flex items-center gap-3">
           <button type="button" className="ps-quiet" onClick={onClose}>
             <ArrowLeft size={16} />
             Volver
           </button>
-          <h1 id="project-settings-title" className="text-2xl font-black sm:text-3xl">Configuración del proyecto</h1>
+          <h1 id="project-settings-title" className="text-2xl font-black sm:text-3xl">Información del Proyecto</h1>
         </div>
 
         <div className="ps-settings-cover">
           <ProjectCover project={shown} />
           <StatusBadge project={shown} className="ps-badge--on-media absolute left-4 top-4" />
           <div className="ps-settings-cover-bar">
-            <button type="button" className="ps-settings-cover-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
+            <button
+              type="button"
+              className="ps-settings-cover-btn"
+              disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                fileRef.current?.click();
+              }}
+            >
               <ImagePlus size={16} />
               {busy ? 'Subiendo…' : 'Subir foto'}
             </button>
@@ -223,7 +237,14 @@ const ProjectSettingsView = ({ project, userId, onClose, onUpdated }) => {
               <RotateCcw size={16} />
               Imagen predeterminada
             </button>
-            <input ref={fileRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={upload} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              className="hidden"
+              onClick={(event) => event.stopPropagation()}
+              onChange={upload}
+            />
           </div>
         </div>
 

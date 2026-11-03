@@ -1,9 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MoreVertical } from 'lucide-react';
 import ProjectSettingsView from './ProjectSettingsView';
 
+export const CLOSE_PROJECT_SETTINGS = 'sprintops-close-project-settings';
+
+export function closeProjectSettings() {
+  window.dispatchEvent(new Event(CLOSE_PROJECT_SETTINGS));
+}
+
 const ProjectActionsMenu = ({ project, userId, onCoverUpdated }) => {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = () => setOpen(false);
+    window.addEventListener(CLOSE_PROJECT_SETTINGS, close);
+    return () => window.removeEventListener(CLOSE_PROJECT_SETTINGS, close);
+  }, [open]);
 
   return (
     <>

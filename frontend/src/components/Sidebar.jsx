@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChartColumn, ChevronLeft, CircleUser, House, LogOut, Palette, Settings, X } from 'lucide-react';
+import { ChartColumn, ChevronDown, ChevronLeft, CircleUser, Folder, House, LogOut, Palette, Settings, X } from 'lucide-react';
 import Avatar from './Avatar';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useProjects } from '../features/project/hooks/useProjects';
+import { sortProjects } from '../features/home/projectModel';
 import { useDismiss } from '../features/home/useDismiss';
+import { closeProjectSettings } from '../features/home/ProjectActionsMenu';
 
 const MAIN = [
   { to: '/home', label: 'Inicio', icon: House, match: ['/home', '/projects'] },
@@ -27,7 +30,10 @@ const Sidebar = ({ open, onClose }) => {
   const onSettingsRoute = SETTINGS.some((item) => isMatch(item, path));
   const [settingsHeld, setSettingsHeld] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(true);
   const showSettings = onSettingsRoute || settingsHeld;
+  const { projects, isLoading, error } = useProjects(user?.id);
+  const quickProjects = useMemo(() => sortProjects(projects, 'activity'), [projects]);
 
   useDismiss(accountOpen, () => setAccountOpen(false), accountRef);
 
@@ -53,8 +59,6 @@ const Sidebar = ({ open, onClose }) => {
     navigate('/login');
   };
 
-  const links = showSettings ? SETTINGS : MAIN;
-
   return (
     <>
       <button
@@ -70,14 +74,10 @@ const Sidebar = ({ open, onClose }) => {
             <X size={18} />
           </button>
         </div>
-        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-          {showSettings && (
-            <button type="button" className="ps-side-back" onClick={closeSettings}>
-              <ChevronLeft size={18} strokeWidth={1.75} />
-              <span className="ps-side-label">Ajustes</span>
-            </button>
-          )}
-          {links.map((item) => {
+        <nav className="ps-nav">
+          <div className={`ps-nav-stage ${showSettings ? 'is-settings' : ''}`}>
+            <div className="ps-nav-pane ps-nav-pane--main" inert={showSettings ? true : undefined}>
+          {MAIN.map((item) => {
             const Icon = item.icon;
             const active = isMatch(item, path);
             return (
@@ -87,12 +87,79 @@ const Sidebar = ({ open, onClose }) => {
                 aria-current={active ? 'page' : undefined}
                 title={item.label}
                 className={`ps-side-link ${active ? 'is-active' : ''}`}
+                onClick={closeProjectSettings}
               >
                 <Icon size={18} strokeWidth={1.75} />
                 <span className="ps-side-label">{item.label}</span>
               </Link>
             );
           })}
+          <div className="ps-project-tree">
+              <button
+                type="button"
+                className={`ps-side-link ps-project-toggle ${projectsOpen ? 'is-open' : ''}`}
+                aria-expanded={projectsOpen}
+                onClick={() => setProjectsOpen((value) => !value)}
+              >
+                <Folder size={18} strokeWidth={1.75} />
+                <span className="ps-side-label">Proyectos</span>
+                <ChevronDown className="ps-side-chevron" size={16} strokeWidth={1.75} />
+              </button>
+              <div className={`ps-project-drop ${projectsOpen ? 'is-open' : ''}`}>
+                <div className="ps-project-drop-inner" inert={projectsOpen ? undefined : true}>
+                  {isLoading && quickProjects.length === 0 ? (
+                    <p className="ps-project-note">Cargando…</p>
+                  ) : error && quickProjects.length === 0 ? (
+                    <p className="ps-project-note">No se pudieron cargar</p>
+                  ) : quickProjects.length === 0 ? (
+                    <p className="ps-project-note">Sin proyectos</p>
+                  ) : (
+                    <ul className="ps-project-list">
+                      {quickProjects.map((project) => {
+                        const href = `/project/${project.id}/sprints`;
+                        const active = path === `/project/${project.id}` || path.startsWith(`/project/${project.id}/`);
+                        return (
+                          <li key={project.id}>
+                            <Link
+                              to={href}
+                              title={project.name}
+                              aria-current={active ? 'page' : undefined}
+                              className={`ps-project-link ${active ? 'is-active' : ''}`}
+                            >
+                              <span className="ps-side-label">{project.name}</span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+            </div>
+            <div className="ps-nav-pane ps-nav-pane--settings" inert={showSettings ? undefined : true}>
+              <button type="button" className="ps-side-back" onClick={closeSettings}>
+                <ChevronLeft size={18} strokeWidth={1.75} />
+                <span className="ps-side-label">Ajustes</span>
+              </button>
+              {SETTINGS.map((item) => {
+                const Icon = item.icon;
+                const active = isMatch(item, path);
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    aria-current={active ? 'page' : undefined}
+                    title={item.label}
+                    className={`ps-side-link ${active ? 'is-active' : ''}`}
+                  >
+                    <Icon size={18} strokeWidth={1.75} />
+                    <span className="ps-side-label">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         </nav>
 
         <div className="ps-account" ref={accountRef}>

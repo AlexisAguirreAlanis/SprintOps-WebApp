@@ -682,6 +682,132 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
   color: var(--app-header-text);
 }
 
+.ps-nav {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.ps-nav-stage {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ps-nav-pane {
+  grid-area: 1 / 1;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 240ms ease;
+}
+
+.ps-nav-pane--settings {
+  transform: translateX(22%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ps-nav-stage.is-settings .ps-nav-pane--main {
+  transform: translateX(-22%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ps-nav-stage.is-settings .ps-nav-pane--settings {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ps-account-gear svg {
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ps-account-gear.is-active svg {
+  transform: rotate(70deg);
+}
+
+.ps-project-toggle {
+  width: 100%;
+}
+
+.ps-side-chevron {
+  margin-left: auto;
+  opacity: 0.7;
+  transform: rotate(-90deg);
+  transition: transform 180ms ease;
+}
+
+.ps-project-toggle.is-open .ps-side-chevron {
+  transform: rotate(0deg);
+}
+
+.ps-project-drop {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms ease;
+}
+
+.ps-project-drop.is-open {
+  grid-template-rows: 1fr;
+}
+
+.ps-project-drop-inner {
+  overflow: hidden;
+}
+
+.ps-project-list {
+  margin: 2px 4px 6px 18px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--app-header-text) 16%, transparent);
+}
+
+.ps-project-link {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: color-mix(in srgb, var(--app-header-text) 74%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ps-project-link .ps-side-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ps-project-link:hover,
+.ps-project-link:focus-visible,
+.ps-project-link.is-active {
+  background: color-mix(in srgb, var(--app-header-text) 8%, transparent);
+  color: var(--app-header-text);
+}
+
+.ps-project-link.is-active {
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+}
+
+.ps-project-note {
+  margin: 2px 8px 8px 28px;
+  color: color-mix(in srgb, var(--app-header-text) 55%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .ps-side-logout {
   color: #f3b4ac;
 }
@@ -854,6 +980,10 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
     justify-content: center;
     width: 100%;
   }
+
+  .ps-project-tree {
+    display: none;
+  }
 }
 
 .ps-card,
@@ -918,6 +1048,7 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
 .ps-primary:focus-visible,
 .ps-quiet:focus-visible,
 .ps-side-link:focus-visible,
+.ps-project-link:focus-visible,
 .ps-side-back:focus-visible,
 .ps-account-card:focus-visible,
 .ps-account-gear:focus-visible,
@@ -1523,6 +1654,10 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
   .ps-progress > span,
   .ps-sidebar,
   .ps-account-drop,
+  .ps-project-drop,
+  .ps-side-chevron,
+  .ps-nav-pane,
+  .ps-account-gear svg,
   .ps-skeleton,
   .ps-tabs button,
   .ps-view-switch button,

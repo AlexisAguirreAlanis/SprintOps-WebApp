@@ -5,6 +5,7 @@ import SearchBar from './SearchBar';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useDismiss } from '../features/home/useDismiss';
 import { notificationsRepository } from '../data/repositories/notificationsRepository';
+import { closeProjectSettings } from '../features/home/ProjectActionsMenu';
 
 const Navbar = ({ onSearch, searchQuery, onOpenNav }) => {
   const { user } = useAuth();
@@ -33,7 +34,7 @@ const Navbar = ({ onSearch, searchQuery, onOpenNav }) => {
           <Menu size={20} />
         </button>
 
-        <Link to="/home" className="ps-brand-lockup flex shrink-0 items-center gap-2 py-1" aria-label="Pistache">
+        <Link to="/home" className="ps-brand-lockup flex shrink-0 items-center gap-2 py-1" aria-label="Pistache" onClick={closeProjectSettings}>
           <span className="ps-brand" aria-hidden="true">
             <span className="ps-brand-ink" />
             <span className="ps-brand-leaf" />
