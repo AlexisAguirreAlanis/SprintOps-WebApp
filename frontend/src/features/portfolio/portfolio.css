@@ -21,12 +21,89 @@
   box-shadow: inset 0 0 0 2px var(--app-accent);
 }
 
+.pf-template-stage {
+  position: relative;
+}
+
+@property --fade-left {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-right {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 .pf-templates {
+  --fade-left: 0px;
+  --fade-right: 0px;
   display: flex;
   gap: 12px;
   overflow-x: auto;
   scroll-behavior: smooth;
-  padding: 2px 2px 8px;
+  scroll-padding-inline: 18px;
+  padding: 14px 14px 40px;
+  transition:
+    --fade-left 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    --fade-right 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgb(255 255 255 / 0.08) calc(var(--fade-left) * 0.22),
+    rgb(255 255 255 / 0.4) calc(var(--fade-left) * 0.55),
+    rgb(255 255 255 / 0.82) calc(var(--fade-left) * 0.82),
+    #fff var(--fade-left),
+    #fff calc(100% - var(--fade-right)),
+    rgb(255 255 255 / 0.82) calc(100% - var(--fade-right) * 0.82),
+    rgb(255 255 255 / 0.4) calc(100% - var(--fade-right) * 0.55),
+    rgb(255 255 255 / 0.08) calc(100% - var(--fade-right) * 0.22),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    rgb(255 255 255 / 0.08) calc(var(--fade-left) * 0.22),
+    rgb(255 255 255 / 0.4) calc(var(--fade-left) * 0.55),
+    rgb(255 255 255 / 0.82) calc(var(--fade-left) * 0.82),
+    #fff var(--fade-left),
+    #fff calc(100% - var(--fade-right)),
+    rgb(255 255 255 / 0.82) calc(100% - var(--fade-right) * 0.82),
+    rgb(255 255 255 / 0.4) calc(100% - var(--fade-right) * 0.55),
+    rgb(255 255 255 / 0.08) calc(100% - var(--fade-right) * 0.22),
+    transparent 100%
+  );
+}
+
+.pf-template-arrow {
+  position: absolute;
+  z-index: 2;
+  top: calc(14px + (100% - 54px) / 2);
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-text) 14%, transparent);
+}
+
+.pf-template-arrow.is-left {
+  left: 8px;
+}
+
+.pf-template-arrow.is-right {
+  right: 8px;
+}
+
+.pf-template-arrow:hover,
+.pf-template-arrow:focus-visible {
+  background: color-mix(in srgb, var(--app-accent) 18%, var(--app-surface));
 }
 
 .pf-template {
@@ -439,7 +516,8 @@
   .pf-template,
   .pf-sheet,
   .pf-inspector,
-  .pf-templates {
+  .pf-templates,
+  .pf-template-arrow {
     transition: none;
     scroll-behavior: auto;
   }

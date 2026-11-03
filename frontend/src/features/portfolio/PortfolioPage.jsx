@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Briefcase,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Folder,
   LayoutGrid,
   Link2,
@@ -63,6 +65,8 @@ const PortfolioPage = () => {
   const createRef = useRef(null);
   const sortRef = useRef(null);
   const stripRef = useRef(null);
+  const railRef = useRef(null);
+  const [rail, setRail] = useState({ left: false, right: false });
   useDismiss(createOpen, () => setCreateOpen(false), createRef);
   useDismiss(sortOpen, () => setSortOpen(false), sortRef);
 
@@ -82,6 +86,47 @@ const PortfolioPage = () => {
   useEffect(() => {
     load();
   }, [user?.id]);
+
+  useLayoutEffect(() => {
+    const railEl = railRef.current;
+    if (!railEl) return undefined;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const max = railEl.scrollWidth - railEl.clientWidth;
+      const overflow = max > 2;
+      const leftDistance = railEl.scrollLeft;
+      const rightDistance = max - railEl.scrollLeft;
+      const fadeMax = 64;
+      const length = (distance) => {
+        const span = Math.max(80, fadeMax * 1.2);
+        const t = Math.min(1, Math.max(0, distance / span));
+        const eased = t * t * (3 - 2 * t);
+        return `${Math.round(fadeMax * eased)}px`;
+      };
+      railEl.style.setProperty('--fade-left', overflow ? length(leftDistance) : '0px');
+      railEl.style.setProperty('--fade-right', overflow ? length(rightDistance) : '0px');
+      const next = { left: leftDistance > 2, right: overflow && rightDistance > 2 };
+      setRail((current) => (current.left === next.left && current.right === next.right ? current : next));
+    };
+    const schedule = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(update);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(railEl);
+    railEl.addEventListener('scroll', schedule, { passive: true });
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      railEl.removeEventListener('scroll', schedule);
+      observer.disconnect();
+    };
+  }, [templates.length]);
+
+  const nudgeTemplates = (direction) => {
+    railRef.current?.scrollBy({ left: direction * 360, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     if (!menuId) return undefined;
@@ -142,7 +187,7 @@ const PortfolioPage = () => {
   };
 
   return (
-    <div className="pf-page flex h-full min-h-0 flex-col px-4 py-5 md:px-6 lg:px-8">
+    <div className="pf-page flex min-h-full w-full min-w-0 shrink-0 flex-col px-4 pb-16 pt-5 md:px-6 lg:px-8">
       <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-3xl font-black tracking-tight md:text-4xl">Portafolio</h1>
@@ -201,17 +246,26 @@ const PortfolioPage = () => {
       <div className="mb-6" ref={stripRef}>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-black">Crear desde una plantilla</h2>
-          <button type="button" className="ps-quiet" onClick={() => stripRef.current?.querySelector('.pf-templates')?.scrollBy({ left: 360, behavior: 'smooth' })}>
-            Ver más
-          </button>
         </div>
-        <div className="pf-templates no-scrollbar">
-          {templates.map((template) => (
-            <button key={template.id} type="button" className="pf-template" disabled={busy} onClick={() => createSheet(template.id)}>
-              <div className="pf-template-art"><SheetThumb elements={template.elements} /></div>
-              <span>{template.name}</span>
+        <div className="pf-template-stage">
+          <div className="pf-templates no-scrollbar" ref={railRef}>
+            {templates.map((template) => (
+              <button key={template.id} type="button" className="pf-template" disabled={busy} onClick={() => createSheet(template.id)}>
+                <div className="pf-template-art"><SheetThumb elements={template.elements} /></div>
+                <span>{template.name}</span>
+              </button>
+            ))}
+          </div>
+          {rail.left && (
+            <button type="button" className="pf-template-arrow is-left" aria-label="Plantillas anteriores" onClick={() => nudgeTemplates(-1)}>
+              <ChevronLeft size={16} />
             </button>
-          ))}
+          )}
+          {rail.right && (
+            <button type="button" className="pf-template-arrow is-right" aria-label="Más plantillas" onClick={() => nudgeTemplates(1)}>
+              <ChevronRight size={16} />
+            </button>
+          )}
         </div>
       </div>
 
