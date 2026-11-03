@@ -4,9 +4,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.pistache.sprintops_backend.dto.HojaDTO;
 import com.pistache.sprintops_backend.model.Hoja;
+import com.pistache.sprintops_backend.model.HojaInvitado;
 import com.pistache.sprintops_backend.model.InfoUsuarioEquipo;
 import com.pistache.sprintops_backend.model.Proyecto;
 import com.pistache.sprintops_backend.model.Usuario;
+import com.pistache.sprintops_backend.repository.HojaInvitadoRepository;
 import com.pistache.sprintops_backend.repository.HojaRepository;
 import com.pistache.sprintops_backend.repository.InfoUsuarioEquipoRepository;
 import com.pistache.sprintops_backend.repository.ProyectoRepository;
@@ -18,9 +20,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class HojaService {
@@ -29,19 +34,25 @@ public class HojaService {
     public static final String EMPTY_DOCUMENT = "{\"schemaVersion\":1,\"elements\":[]}";
     private static final int MAX_DOCUMENT_CHARS = 1_500_000;
 
+    private static final long PRESENCE_TTL_MS = 20_000;
+
     private final HojaRepository hojaRepository;
+    private final HojaInvitadoRepository invitadoRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProyectoRepository proyectoRepository;
     private final InfoUsuarioEquipoRepository membershipRepository;
     private final ObjectMapper objectMapper;
+    private final Map<Integer, Map<Integer, Long>> presence = new ConcurrentHashMap<>();
 
     public HojaService(
             HojaRepository hojaRepository,
+            HojaInvitadoRepository invitadoRepository,
             UsuarioRepository usuarioRepository,
             ProyectoRepository proyectoRepository,
             InfoUsuarioEquipoRepository membershipRepository,
             ObjectMapper objectMapper) {
         this.hojaRepository = hojaRepository;
+        this.invitadoRepository = invitadoRepository;
         this.usuarioRepository = usuarioRepository;
         this.proyectoRepository = proyectoRepository;
         this.membershipRepository = membershipRepository;
@@ -60,6 +71,9 @@ public class HojaService {
             for (Hoja hoja : hojaRepository.findByProyecto_Equipo_IdEquipoIn(teams)) {
                 found.putIfAbsent(hoja.getIdHoja(), hoja);
             }
+        }
+        for (HojaInvitado invite : invitadoRepository.findByUsuario_IdUsuarioAndOrigen(user.getIdUsuario(), "invitado")) {
+            if (invite.getHoja() != null) found.putIfAbsent(invite.getHoja().getIdHoja(), invite.getHoja());
         }
         List<HojaDTO> result = new ArrayList<>();
         for (Hoja hoja : found.values()) {
@@ -174,11 +188,32 @@ public class HojaService {
     }
 
     private boolean canView(Hoja hoja, Integer userId) {
-        return isOwner(hoja, userId) || isProjectMember(hoja, userId);
+        if (isOwner(hoja, userId) || isInvited(hoja, userId)) return true;
+        if ("enlace".equals(visibility(hoja))) return true;
+        return teamCanEnter(hoja, userId);
     }
 
     private boolean canEdit(Hoja hoja, Integer userId) {
-        return canView(hoja, userId);
+        if (isOwner(hoja, userId) || isInvited(hoja, userId)) return true;
+        return teamCanEnter(hoja, userId);
+    }
+
+    private boolean teamCanEnter(Hoja hoja, Integer userId) {
+        if (!isProjectMember(hoja, userId)) return false;
+        if (!Boolean.TRUE.equals(hoja.getFiltrarEquipo())) return true;
+        return invitadoRepository
+                .findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), userId, "equipo")
+                .isPresent();
+    }
+
+    private boolean isInvited(Hoja hoja, Integer userId) {
+        return invitadoRepository
+                .findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), userId, "invitado")
+                .isPresent();
+    }
+
+    private String visibility(Hoja hoja) {
+        return "enlace".equals(hoja.getVisibilidad()) ? "enlace" : "privada";
     }
 
     private boolean isOwner(Hoja hoja, Integer userId) {
@@ -267,6 +302,8 @@ public class HojaService {
         dto.team = dto.projectId != null;
         dto.canManage = dto.ownerId != null && dto.ownerId.equals(userId);
         dto.canEdit = canEdit(hoja, userId);
+        dto.visibility = visibility(hoja);
+        dto.filterTeam = Boolean.TRUE.equals(hoja.getFiltrarEquipo());
         dto.revision = hoja.getRevision();
         dto.schemaVersion = hoja.getSchemaVersion();
         dto.preview = preview(hoja.getDocumento());
@@ -319,6 +356,130 @@ public class HojaService {
             return items;
         }
         return items;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> access(Integer id, Integer userId) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        if (!isOwner(hoja, user.getIdUsuario())) throw forbidden();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("visibility", visibility(hoja));
+        body.put("filterTeam", Boolean.TRUE.equals(hoja.getFiltrarEquipo()));
+        body.put("projectId", hoja.getProyecto() == null ? null : hoja.getProyecto().getIdProyecto());
+        body.put("projectName", hoja.getProyecto() == null ? null : hoja.getProyecto().getNombreProyecto());
+        List<Map<String, Object>> invites = new ArrayList<>();
+        List<HojaInvitado> rows = invitadoRepository.findByHoja_IdHoja(hoja.getIdHoja());
+        Set<Integer> teamGrants = new HashSet<>();
+        for (HojaInvitado row : rows) {
+            if (row.getUsuario() == null) continue;
+            if ("equipo".equals(row.getOrigen())) teamGrants.add(row.getUsuario().getIdUsuario());
+            if ("invitado".equals(row.getOrigen())) invites.add(person(row.getUsuario()));
+        }
+        body.put("invites", invites);
+        body.put("projectMembers", projectPeople(hoja, teamGrants));
+        return body;
+    }
+
+    @Transactional
+    public Map<String, Object> updateAccess(
+            Integer id,
+            Integer userId,
+            String visibility,
+            Boolean filterTeam,
+            List<Integer> teamUserIds,
+            String addEmail,
+            Integer removeUserId) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        if (!isOwner(hoja, user.getIdUsuario())) throw forbidden();
+        if (visibility != null) {
+            hoja.setVisibilidad("enlace".equals(visibility) ? "enlace" : "privada");
+        }
+        if (filterTeam != null) {
+            hoja.setFiltrarEquipo(filterTeam);
+            if (!filterTeam) invitadoRepository.deleteByHoja_IdHojaAndOrigen(hoja.getIdHoja(), "equipo");
+        }
+        if (teamUserIds != null) {
+            hoja.setFiltrarEquipo(true);
+            invitadoRepository.deleteByHoja_IdHojaAndOrigen(hoja.getIdHoja(), "equipo");
+            Set<Integer> allowed = new HashSet<>();
+            if (hoja.getProyecto() != null && hoja.getProyecto().getEquipo() != null) {
+                for (InfoUsuarioEquipo membership : membershipRepository.findByEquipoIdEquipo(hoja.getProyecto().getEquipo().getIdEquipo())) {
+                    if (membership.getUsuario() != null) allowed.add(membership.getUsuario().getIdUsuario());
+                }
+            }
+            for (Integer memberId : teamUserIds) {
+                if (memberId == null || !allowed.contains(memberId) || memberId.equals(user.getIdUsuario())) continue;
+                if (invitadoRepository.findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), memberId, "equipo").isPresent()) {
+                    continue;
+                }
+                Usuario member = usuarioRepository.findById(memberId).orElse(null);
+                if (member == null) continue;
+                HojaInvitado row = new HojaInvitado();
+                row.setHoja(hoja);
+                row.setUsuario(member);
+                row.setOrigen("equipo");
+                invitadoRepository.save(row);
+            }
+        }
+        if (removeUserId != null) {
+            invitadoRepository.deleteByHoja_IdHojaAndUsuario_IdUsuario(hoja.getIdHoja(), removeUserId);
+        }
+        if (addEmail != null && !addEmail.isBlank()) {
+            Usuario invited = usuarioRepository.findByEmailUsuario(addEmail.trim())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No hay una cuenta con ese correo."));
+            if (!invited.getIdUsuario().equals(user.getIdUsuario())
+                    && invitadoRepository.findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), invited.getIdUsuario(), "invitado").isEmpty()) {
+                HojaInvitado row = new HojaInvitado();
+                row.setHoja(hoja);
+                row.setUsuario(invited);
+                row.setOrigen("invitado");
+                invitadoRepository.save(row);
+            }
+        }
+        hoja.setFechaActualizacion(Instant.now());
+        hojaRepository.save(hoja);
+        invitadoRepository.flush();
+        return access(id, userId);
+    }
+
+    public List<Map<String, Object>> pulse(Integer id, Integer userId) {
+        Usuario user = requireUser(userId);
+        requireView(id, user.getIdUsuario());
+        long now = System.currentTimeMillis();
+        Map<Integer, Long> room = presence.computeIfAbsent(id, key -> new ConcurrentHashMap<>());
+        room.put(user.getIdUsuario(), now);
+        room.entrySet().removeIf(entry -> now - entry.getValue() > PRESENCE_TTL_MS);
+        List<Map<String, Object>> people = new ArrayList<>();
+        for (Integer presentId : room.keySet()) {
+            usuarioRepository.findById(presentId).ifPresent(present -> people.add(person(present)));
+        }
+        return people;
+    }
+
+    private List<Map<String, Object>> projectPeople(Hoja hoja, Set<Integer> teamGrants) {
+        List<Map<String, Object>> people = new ArrayList<>();
+        if (hoja.getProyecto() == null || hoja.getProyecto().getEquipo() == null) return people;
+        boolean filtered = Boolean.TRUE.equals(hoja.getFiltrarEquipo());
+        Integer ownerId = hoja.getPropietario() == null ? null : hoja.getPropietario().getIdUsuario();
+        for (InfoUsuarioEquipo membership : membershipRepository.findByEquipoIdEquipo(hoja.getProyecto().getEquipo().getIdEquipo())) {
+            Usuario member = membership.getUsuario();
+            if (member == null || member.getIdUsuario().equals(ownerId)) continue;
+            Map<String, Object> item = person(member);
+            item.put("included", !filtered || teamGrants.contains(member.getIdUsuario()));
+            people.add(item);
+        }
+        return people;
+    }
+
+    private Map<String, Object> person(Usuario user) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", user.getIdUsuario());
+        item.put("name", user.getNombreUsuario() == null ? "" : user.getNombreUsuario());
+        item.put("email", user.getEmailUsuario() == null ? "" : user.getEmailUsuario());
+        item.put("avatarUrl", user.getAvatarUrl());
+        return item;
     }
 
     private ResponseStatusException forbidden() {

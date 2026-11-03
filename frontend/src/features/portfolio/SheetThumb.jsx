@@ -1,4 +1,4 @@
-import { textColor } from './portfolioDocument';
+import { arrowPath, isArrow, textColor } from './portfolioDocument';
 
 const SheetThumb = ({ elements = [], className = '' }) => {
   const visible = elements.filter((element) => element.visible !== false);
@@ -26,16 +26,35 @@ const SheetThumb = ({ elements = [], className = '' }) => {
     <svg className={`pf-thumb ${className}`} viewBox={`${x} ${y} ${Math.max(40, right - x)} ${Math.max(40, bottom - y)}`}>
       {visible.map((element) => {
         if (element.type === 'line' && element.points?.length >= 4) {
+          const local = isArrow(element) ? arrowPath(element).points : element.points;
+          const world = [];
+          for (let index = 0; index < local.length; index += 2) {
+            world.push(element.x + local[index], element.y + local[index + 1]);
+          }
+          const x2 = world[world.length - 2];
+          const y2 = world[world.length - 1];
+          const x1 = world[world.length - 4];
+          const y1 = world[world.length - 3];
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const length = Math.hypot(dx, dy) || 1;
+          const ux = dx / length;
+          const uy = dy / length;
+          const baseX = x2 - ux * 11;
+          const baseY = y2 - uy * 11;
+          const stroke = element.stroke || '#1e293b';
+          const points = world.join(' ');
           return (
-            <line
-              key={element.id}
-              x1={element.x + element.points[0]}
-              y1={element.y + element.points[1]}
-              x2={element.x + element.points[2]}
-              y2={element.y + element.points[3]}
-              stroke={element.stroke || '#1e293b'}
-              strokeWidth={element.strokeWidth || 2}
-            />
+            <g key={element.id}>
+              {element.closed ? (
+                <polygon points={points} fill={element.fill && element.fill !== 'transparent' ? element.fill : 'none'} stroke={stroke} strokeWidth={element.strokeWidth || 2} />
+              ) : (
+                <polyline points={points} fill="none" stroke={stroke} strokeWidth={element.strokeWidth || 2} />
+              )}
+              {isArrow(element) && (
+                <polygon points={`${x2},${y2} ${baseX - uy * 6},${baseY + ux * 6} ${baseX + uy * 6},${baseY - ux * 6}`} fill={stroke} />
+              )}
+            </g>
           );
         }
         if (element.type === 'text') {

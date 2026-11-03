@@ -19,6 +19,8 @@ public class HojaDTO {
     public boolean team;
     public boolean canManage;
     public boolean canEdit;
+    public String visibility;
+    public boolean filterTeam;
     public int elementCount;
     public long revision;
     public int schemaVersion;

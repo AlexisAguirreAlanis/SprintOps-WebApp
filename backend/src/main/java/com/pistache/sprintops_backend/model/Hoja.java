@@ -37,6 +37,14 @@ public class Hoja {
     @Column(name = "eliminada", nullable = false)
     private boolean eliminada;
 
+    /** privada: propietario, invitados y equipo. enlace: cualquiera con la sesión y el link puede ver. */
+    @Column(name = "visibilidad", length = 20)
+    private String visibilidad;
+
+    /** Si es true, el equipo del proyecto vinculado solo entra si está marcado en hoja_invitado. */
+    @Column(name = "filtrar_equipo")
+    private Boolean filtrarEquipo;
+
     @Column(name = "schema_version", nullable = false)
     private int schemaVersion = 1;
 

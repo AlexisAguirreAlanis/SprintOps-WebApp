@@ -7,4 +7,7 @@ export const portfolioRepository = {
   update: (id, body) => apiClient.put(`/hojas/${id}`, body),
   saveDocument: (id, body) => apiClient.put(`/hojas/${id}/documento`, body),
   duplicate: (id, userId) => apiClient.post(`/hojas/${id}/duplicar?userId=${encodeURIComponent(userId)}`),
+  access: (id, userId) => apiClient.get(`/hojas/${id}/acceso?userId=${encodeURIComponent(userId)}`),
+  updateAccess: (id, body) => apiClient.put(`/hojas/${id}/acceso`, body),
+  presence: (id, userId) => apiClient.post(`/hojas/${id}/presencia`, { userId }),
 };

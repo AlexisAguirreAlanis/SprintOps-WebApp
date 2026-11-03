@@ -1,42 +1,84 @@
 import { memo, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Ellipse, Group, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
+import { Arrow, Ellipse, Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronLeft,
-  Eye,
-  EyeOff,
+  File,
   Hand,
-  Lock,
-  LockOpen,
+  Image as ImageIcon,
+  Link2,
+  Maximize2,
+  Minimize2,
   Minus,
   MousePointer2,
+  PaintBucket,
+  Pencil,
+  PenLine,
   Plus,
+  Redo2,
+  Share2,
+  SprayCan,
   Square,
   Star,
+  StickyNote,
+  Table2,
   Type,
+  Undo2,
+  Users,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../auth/hooks/useAuth';
+import { useProjects } from '../project/hooks/useProjects';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
+import { useDismiss } from '../home/useDismiss';
 import {
   alignElements,
+  arrowPath,
+  bendFromPoint,
   cloneElement,
   createElement,
+  createId,
+  defaultBend,
   elementBounds,
   intersects,
+  isArrow,
   parseDocument,
   sceneBounds,
   serializeDocument,
   textColor,
 } from './portfolioDocument';
+import { readImageFile } from './editorMedia';
+import EditorLibrary from './EditorLibrary';
+import EditorInspector from './EditorInspector';
 import './portfolio.css';
 
 const FONTS = [
   { label: 'Sans', value: 'ui-sans-serif, system-ui, sans-serif' },
-  { label: 'Serif', value: 'Georgia, serif' },
-  { label: 'Mono', value: 'ui-monospace, SFMono-Regular, monospace' },
+  { label: 'Redonda', value: '"Avenir Next", Avenir, "Segoe UI", sans-serif' },
+  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
+  { label: 'Editorial', value: '"Iowan Old Style", Palatino, "Palatino Linotype", serif' },
+  { label: 'Mono', value: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+  { label: 'Compacta', value: '"Avenir Next Condensed", "Arial Narrow", sans-serif' },
 ];
+
+const INK_SWATCHES = ['#1e293b', '#2f6f5e', '#67bfa1', '#c74634', '#d97706', '#3b6ea5', '#ffffff'];
+
+function sprayDots(x, y, radius, count) {
+  const points = [];
+  for (let index = 0; index < count; index += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.sqrt(Math.random()) * radius;
+    points.push(x + Math.cos(angle) * dist, y + Math.sin(angle) * dist);
+  }
+  return points;
+}
+
+function paintOf(element, color) {
+  if (element.type === 'image' || element.type === 'video') return null;
+  if (element.type === 'text') return { textFill: color };
+  if (element.type === 'line' && !element.closed) return { stroke: color, strokeWidth: element.strokeWidth || 3 };
+  return { fill: color };
+}
 
 function editorReducer(state, action) {
   if (action.type === 'load') {
@@ -101,7 +143,92 @@ function fontStyle(element) {
   return 'normal';
 }
 
-const SceneNode = memo(function SceneNode({ element, tool, editing, accent, onSelect, onBegin, onLive, onEnd, setNode }) {
+const RemoteImage = memo(function RemoteImage({ src, width, height, cornerRadius }) {
+  const [image, setImage] = useState(null);
+  useEffect(() => {
+    if (!src) return undefined;
+    let alive = true;
+    const picture = new window.Image();
+    picture.onload = () => { if (alive) setImage(picture); };
+    picture.src = src;
+    return () => { alive = false; };
+  }, [src]);
+  return <KonvaImage image={image} width={width} height={height} cornerRadius={cornerRadius || 0} listening={false} />;
+});
+
+function ArrowTip({ x, y, scale, accent, label, onBegin, onDrag, onEnd }) {
+  const radius = Math.max(4.5, 7 / (scale || 1));
+  return (
+    <Circle
+      x={x}
+      y={y}
+      radius={radius}
+      fill="#ffffff"
+      stroke={accent}
+      strokeWidth={Math.max(1.25, 2 / (scale || 1))}
+      draggable
+      onMouseDown={(event) => { event.cancelBubble = true; }}
+      onDragStart={(event) => { event.cancelBubble = true; onBegin(); }}
+      onDragMove={(event) => { event.cancelBubble = true; onDrag(event.target.x(), event.target.y()); }}
+      onDragEnd={(event) => { event.cancelBubble = true; onEnd(); }}
+      name={label}
+    />
+  );
+}
+
+function ArrowShape({ element, accent, selected, scale, onBegin, onLive, onEnd }) {
+  const raw = element.points;
+  const route = element.route || 'straight';
+  const path = arrowPath(element);
+  const stroke = element.stroke && element.stroke !== 'transparent' ? element.stroke : accent;
+  const width = element.strokeWidth || 3;
+  const span = Math.hypot(raw[2] - raw[0], raw[3] - raw[1]);
+  const head = Math.max(14, Math.min(34, span * 0.32));
+  const moveTip = (index, x, y) => {
+    const points = raw.slice();
+    points[index] = x;
+    points[index + 1] = y;
+    const partial = { points };
+    if ((element.route || 'straight') === 'curve') partial.bend = Number.isFinite(element.bend) ? element.bend : defaultBend(points);
+    onLive(element.id, partial);
+  };
+  return (
+    <>
+      <Arrow
+        points={path.points}
+        tension={path.tension}
+        stroke={stroke}
+        fill={stroke}
+        strokeWidth={width}
+        pointerLength={head}
+        pointerWidth={head * 0.78}
+        hitStrokeWidth={Math.max(16, width + 12)}
+        lineCap="round"
+        lineJoin="round"
+      />
+      {selected && (
+        <>
+          <ArrowTip x={raw[0]} y={raw[1]} scale={scale} accent={accent} label="Inicio" onBegin={onBegin} onEnd={onEnd} onDrag={(x, y) => moveTip(0, x, y)} />
+          <ArrowTip x={raw[2]} y={raw[3]} scale={scale} accent={accent} label="Punta" onBegin={onBegin} onEnd={onEnd} onDrag={(x, y) => moveTip(2, x, y)} />
+          {route === 'curve' && path.control && (
+            <ArrowTip
+              x={path.control.x}
+              y={path.control.y}
+              scale={scale}
+              accent={accent}
+              label="Curva"
+              onBegin={onBegin}
+              onEnd={onEnd}
+              onDrag={(x, y) => onLive(element.id, { bend: bendFromPoint(raw, x, y), route: 'curve' })}
+            />
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+const SceneNode = memo(function SceneNode({ element, tool, editing, selected, scale, accent, onSelect, onBegin, onLive, onEnd, setNode }) {
   const common = {
     id: element.id,
     x: element.x,
@@ -115,9 +242,18 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, accent, onSe
       if (tool !== 'select' || element.locked) return;
       onSelect(element.id, event.evt.shiftKey);
     },
-    onDragStart: onBegin,
-    onDragMove: (event) => onLive(element.id, { x: event.target.x(), y: event.target.y() }),
-    onDragEnd: onEnd,
+    onDragStart: (event) => {
+      if (event.target !== event.currentTarget) return;
+      onBegin();
+    },
+    onDragMove: (event) => {
+      if (event.target !== event.currentTarget) return;
+      onLive(element.id, { x: event.target.x(), y: event.target.y() });
+    },
+    onDragEnd: (event) => {
+      if (event.target !== event.currentTarget) return;
+      onEnd();
+    },
     onTransformStart: onBegin,
     onTransformEnd: (event) => {
       const node = event.target;
@@ -154,25 +290,53 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, accent, onSe
           stroke={element.stroke}
           strokeWidth={element.strokeWidth || 0}
         />
+      ) : isArrow(element) ? (
+        <ArrowShape
+          element={element}
+          accent={accent}
+          selected={selected && tool === 'select'}
+          scale={scale}
+          onBegin={onBegin}
+          onLive={onLive}
+          onEnd={onEnd}
+        />
+      ) : element.type === 'line' && element.brush === 'spray' ? (
+        <SprayShape element={element} />
       ) : element.type === 'line' ? (
         <Line
           points={element.points || [0, 0, 80, 0]}
           stroke={element.stroke || accent}
-          strokeWidth={element.strokeWidth || 2}
+          strokeWidth={element.strokeWidth || 3}
           hitStrokeWidth={16}
-          lineCap="round"
+          lineCap={element.brush === 'pencil' ? 'butt' : 'round'}
+          lineJoin={element.brush === 'pencil' ? 'miter' : 'round'}
+          closed={Boolean(element.closed)}
+          fill={element.closed ? element.fill : undefined}
+          tension={element.brush === 'pencil' ? 0 : element.brush === 'brush' ? 0.5 : ((element.points || []).length > 6 ? 0.35 : 0)}
         />
+      ) : element.type === 'image' ? (
+        <RemoteImage src={element.src} width={element.width} height={element.height} cornerRadius={element.radius || 0} />
+      ) : element.type === 'video' ? (
+        <>
+          <Rect width={element.width} height={element.height} cornerRadius={element.radius || 16} fill="#0f172a" />
+          <RemoteImage src={element.poster} width={element.width} height={element.height} cornerRadius={element.radius || 16} />
+        </>
+      ) : element.type === 'table' ? (
+        <TableShape element={element} />
       ) : (
         <Rect
           width={element.width}
           height={element.height}
-          cornerRadius={element.radius || 0}
+          cornerRadius={element.radius || (element.type === 'sticky' ? 8 : 0)}
           fill={element.type === 'text' ? 'transparent' : element.fill}
           stroke={element.type === 'frame' ? (element.stroke || accent) : element.stroke}
           strokeWidth={element.type === 'frame' ? (element.strokeWidth || 2) : (element.strokeWidth || 0)}
+          shadowBlur={element.shadow || 0}
+          shadowColor="rgba(15,23,42,0.28)"
+          shadowOffsetY={element.shadow ? 8 : 0}
         />
       )}
-      {element.type !== 'line' && (
+      {element.type !== 'line' && element.type !== 'image' && element.type !== 'table' && (
         <Text
           text={element.text || ''}
           width={element.width}
@@ -191,15 +355,94 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, accent, onSe
   );
 });
 
+function SprayShape({ element }) {
+  const points = element.points || [];
+  let minX = 0;
+  let minY = 0;
+  let maxX = 1;
+  let maxY = 1;
+  if (points.length >= 2) {
+    minX = Infinity;
+    minY = Infinity;
+    maxX = -Infinity;
+    maxY = -Infinity;
+    for (let index = 0; index < points.length; index += 2) {
+      minX = Math.min(minX, points[index]);
+      maxX = Math.max(maxX, points[index]);
+      minY = Math.min(minY, points[index + 1]);
+      maxY = Math.max(maxY, points[index + 1]);
+    }
+  }
+  const radius = Math.max(1.4, (element.strokeWidth || 8) * 0.22);
+  const pad = radius + 4;
+  const dots = [];
+  for (let index = 0; index < points.length; index += 2) {
+    dots.push(
+      <Circle key={index} x={points[index]} y={points[index + 1]} radius={radius} fill={element.stroke || '#1e293b'} listening={false} />,
+    );
+  }
+  return (
+    <>
+      <Rect x={minX - pad} y={minY - pad} width={Math.max(8, maxX - minX + pad * 2)} height={Math.max(8, maxY - minY + pad * 2)} fill="rgba(0,0,0,0.001)" />
+      {dots}
+    </>
+  );
+}
+
+function TableShape({ element }) {
+  const rows = element.rows || 3;
+  const cols = element.cols || 3;
+  const cells = element.cells || [];
+  const cellWidth = element.width / cols;
+  const cellHeight = element.height / rows;
+  const nodes = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const index = row * cols + col;
+      nodes.push(
+        <Rect
+          key={`box-${index}`}
+          x={col * cellWidth}
+          y={row * cellHeight}
+          width={cellWidth}
+          height={cellHeight}
+          fill={row === 0 ? (element.fill || '#e8f6f1') : '#ffffff'}
+          stroke={element.stroke || '#d7e3de'}
+          strokeWidth={1}
+        />,
+        <Text
+          key={`text-${index}`}
+          x={col * cellWidth}
+          y={row * cellHeight}
+          width={cellWidth}
+          height={cellHeight}
+          text={cells[index] || ''}
+          align="center"
+          verticalAlign="middle"
+          fontSize={element.fontSize || 14}
+          fontStyle={fontStyle(element)}
+          fill={textColor(element)}
+          padding={4}
+          listening={false}
+        />,
+      );
+    }
+  }
+  return nodes;
+}
+
 const PortfolioEditorPage = () => {
   const { hojaId } = useParams();
   const { user } = useAuth();
+  const { projects } = useProjects(user?.id);
   const [state, dispatch] = useReducer(editorReducer, {
     elements: [], past: [], future: [], gesturing: false, dirty: false, epoch: 0,
   });
   const [camera, setCamera] = useState({ x: 80, y: 80, scale: 1 });
   const [tool, setTool] = useState('select');
+  const [brush, setBrush] = useState({ size: 12, style: 'brush', color: '#1e293b' });
   const [shape, setShape] = useState('rect');
+  const [arrowRoute, setArrowRoute] = useState('straight');
   const [shapesOpen, setShapesOpen] = useState(false);
   const [selection, setSelection] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -210,7 +453,22 @@ const PortfolioEditorPage = () => {
   const [status, setStatus] = useState('saved');
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorTab, setInspectorTab] = useState('design');
+  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [librarySection, setLibrarySection] = useState('elements');
+  const [uploads, setUploads] = useState([]);
+  const [people, setPeople] = useState([]);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [access, setAccess] = useState(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const [memberQuery, setMemberQuery] = useState('');
+  const [shareNote, setShareNote] = useState('');
+  const [presenting, setPresenting] = useState(false);
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [player, setPlayer] = useState(null);
+  const [full, setFull] = useState(false);
   const [accent, setAccent] = useState('#67BFA1');
   const stageRef = useRef(null);
   const hostRef = useRef(null);
@@ -219,7 +477,9 @@ const PortfolioEditorPage = () => {
   const elementsRef = useRef(state.elements);
   const cameraRef = useRef(camera);
   const toolRef = useRef(tool);
+  const brushRef = useRef(brush);
   const shapeRef = useRef(shape);
+  const arrowRouteRef = useRef(arrowRoute);
   const selectionRef = useRef(selection);
   const revisionRef = useRef(0);
   const epochRef = useRef(0);
@@ -227,10 +487,21 @@ const PortfolioEditorPage = () => {
   const panRef = useRef(null);
   const spaceRef = useRef(false);
   const clipboardRef = useRef([]);
+  const editorRef = useRef(null);
+  const peopleRef = useRef(null);
+  const shareRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const cameraMemory = useRef(null);
+  const presentingRef = useRef(false);
+  const stopPresentRef = useRef(() => {});
+  const stepFrameRef = useRef(() => {});
   elementsRef.current = state.elements;
   cameraRef.current = camera;
   toolRef.current = tool;
+  brushRef.current = brush;
   shapeRef.current = shape;
+  arrowRouteRef.current = arrowRoute;
   selectionRef.current = selection;
   epochRef.current = state.epoch;
 
@@ -241,6 +512,15 @@ const PortfolioEditorPage = () => {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] });
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const node = stageRef.current?.container();
+    if (!node) return;
+    if (tool === 'hand') node.style.cursor = 'grab';
+    else if (tool === 'brush' && brush.style === 'bucket') node.style.cursor = 'cell';
+    else if (tool === 'brush' || tool === 'text' || ['rect', 'ellipse', 'line', 'frame'].includes(tool)) node.style.cursor = 'crosshair';
+    else node.style.cursor = 'default';
+  }, [tool, brush.style, ready]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -328,6 +608,9 @@ const PortfolioEditorPage = () => {
       if (mod && key === 'z') {
         event.preventDefault();
         dispatch({ type: event.shiftKey ? 'redo' : 'undo' });
+      } else if (mod && key === 'y') {
+        event.preventDefault();
+        dispatch({ type: 'redo' });
       } else if (mod && key === 'd') {
         event.preventDefault();
         duplicate();
@@ -338,13 +621,21 @@ const PortfolioEditorPage = () => {
         paste();
       } else if (key === 'backspace' || key === 'delete') {
         removeSelected();
+      } else if (presentingRef.current && key === 'arrowright') {
+        event.preventDefault();
+        stepFrameRef.current(1);
+      } else if (presentingRef.current && key === 'arrowleft') {
+        event.preventDefault();
+        stepFrameRef.current(-1);
       } else if (key === 'escape') {
+        if (presentingRef.current) stopPresentRef.current();
         dispatch({ type: 'end' });
         setEditingId(null);
         setSelection([]);
         setShapesOpen(false);
-      } else if (key === 'v') setTool('select');
+      }       else if (key === 'v') setTool('select');
       else if (key === 'h') setTool('hand');
+      else if (key === 'b') setTool('brush');
       else if (key === 't') setTool('text');
       else if (key === 'r') { setShape('rect'); setTool('rect'); }
       else if (key === 'o') { setShape('ellipse'); setTool('ellipse'); }
@@ -360,10 +651,9 @@ const PortfolioEditorPage = () => {
   }, []);
 
   const live = (id, partial) => {
-    dispatch({
-      type: 'live',
-      elements: elementsRef.current.map((element) => (element.id === id ? { ...element, ...partial } : element)),
-    });
+    const elements = elementsRef.current.map((element) => (element.id === id ? { ...element, ...partial } : element));
+    elementsRef.current = elements;
+    dispatch({ type: 'live', elements });
   };
 
   const commit = (elements) => dispatch({ type: 'commit', elements });
@@ -394,7 +684,7 @@ const PortfolioEditorPage = () => {
       .map((id) => ({ id, node: nodeRefs.current.get(id) }))
       .filter(({ id, node }) => {
         const element = state.elements.find((item) => item.id === id);
-        return node && element && !element.locked && element.visible !== false && element.id !== editingId;
+        return node && element && !element.locked && element.visible !== false && element.id !== editingId && !isArrow(element);
       })
       .map(({ node }) => node);
     transformer.nodes(nodes);
@@ -413,6 +703,45 @@ const PortfolioEditorPage = () => {
     commit([...elementsRef.current, element]);
     setSelection([element.id]);
     return element;
+  };
+
+  const insertElements = (partials) => {
+    const drafts = partials.map((partial) => createElement({ x: 0, y: 0, ...partial }));
+    const bounds = sceneBounds(drafts);
+    const cam = cameraRef.current;
+    const cx = (size.width / 2 - cam.x) / cam.scale;
+    const cy = (size.height / 2 - cam.y) / cam.scale;
+    const dx = bounds ? cx - (bounds.x + bounds.width / 2) : cx;
+    const dy = bounds ? cy - (bounds.y + bounds.height / 2) : cy;
+    const placed = drafts.map((element) => ({ ...element, id: createId(), x: element.x + dx, y: element.y + dy }));
+    commit([...elementsRef.current, ...placed]);
+    setSelection(placed.map((element) => element.id));
+    setTool('select');
+    placed.filter((element) => element.src || element.type === 'file').forEach((element) => {
+      setUploads((current) => [{ key: element.id, name: element.name, element }, ...current].slice(0, 24));
+    });
+  };
+
+  const fitBounds = (bounds, padding = 96) => {
+    if (!bounds || size.width < 20) return;
+    const scale = Math.min(1.5, Math.max(0.1, Math.min((size.width - padding) / bounds.width, (size.height - padding) / bounds.height)));
+    const next = {
+      scale,
+      x: (size.width - bounds.width * scale) / 2 - bounds.x * scale,
+      y: (size.height - bounds.height * scale) / 2 - bounds.y * scale,
+    };
+    setCamera(next);
+    cameraRef.current = next;
+  };
+
+  const playMotion = (element) => {
+    const node = nodeRefs.current.get(element.id);
+    if (!node || !element.motion || element.motion === 'none') return;
+    const duration = element.motionDuration || 0.45;
+    if (element.motion === 'rise') node.y(element.y + 28);
+    if (element.motion === 'pop') { node.scaleX(0.86); node.scaleY(0.86); }
+    node.opacity(0);
+    node.to({ x: element.x, y: element.y, scaleX: 1, scaleY: 1, opacity: element.opacity ?? 1, duration });
   };
 
   const duplicate = () => {
@@ -472,13 +801,27 @@ const PortfolioEditorPage = () => {
 
   const onWheel = (event) => {
     event.evt.preventDefault();
+    const native = event.evt;
     const stage = stageRef.current;
     const pointer = stage.getPointerPosition();
     const current = cameraRef.current;
-    const oldScale = current.scale;
-    const nextScale = Math.min(4, Math.max(0.1, oldScale * (event.evt.deltaY > 0 ? 0.92 : 1.08)));
-    const point = { x: (pointer.x - current.x) / oldScale, y: (pointer.y - current.y) / oldScale };
-    const next = { scale: nextScale, x: pointer.x - point.x * nextScale, y: pointer.y - point.y * nextScale };
+    if (!pointer) return;
+    if (native.ctrlKey || native.metaKey) {
+      const oldScale = current.scale;
+      const nextScale = Math.min(4, Math.max(0.1, oldScale * (native.deltaY > 0 ? 0.92 : 1.08)));
+      const point = { x: (pointer.x - current.x) / oldScale, y: (pointer.y - current.y) / oldScale };
+      const next = { scale: nextScale, x: pointer.x - point.x * nextScale, y: pointer.y - point.y * nextScale };
+      setCamera(next);
+      cameraRef.current = next;
+      return;
+    }
+    let dx = native.deltaX;
+    let dy = native.deltaY;
+    if (native.shiftKey) {
+      dx += dy;
+      dy = 0;
+    }
+    const next = { ...current, x: current.x - dx, y: current.y - dy };
     setCamera(next);
     cameraRef.current = next;
     dispatch({ type: 'touch' });
@@ -495,6 +838,45 @@ const PortfolioEditorPage = () => {
       panRef.current = pointer;
       return;
     }
+    if (toolRef.current === 'brush') {
+      const ink = brushRef.current;
+      const color = ink.color || accent;
+      if (ink.style === 'bucket') {
+        const target = [...elementsRef.current].reverse().find((element) => {
+          if (element.visible === false || element.locked) return false;
+          const box = elementBounds(element);
+          return world.x >= box.x && world.x <= box.x + box.width && world.y >= box.y && world.y <= box.y + box.height;
+        });
+        if (!target) return;
+        const partial = paintOf(target, color);
+        if (!partial) return;
+        commit(elementsRef.current.map((element) => (element.id === target.id ? { ...element, ...partial } : element)));
+        setSelection([target.id]);
+        return;
+      }
+      const strokeWidth = ink.style === 'pencil' ? Math.max(1, Math.round(ink.size * 0.4)) : ink.size;
+      const points = ink.style === 'spray' ? sprayDots(0, 0, ink.size, 12) : [0, 0];
+      const element = createElement({
+        type: 'line',
+        name: ink.style === 'spray' ? 'Aerosol' : ink.style === 'pencil' ? 'Lápiz' : 'Pincel',
+        x: world.x,
+        y: world.y,
+        width: 1,
+        height: 1,
+        points,
+        stroke: color,
+        strokeWidth,
+        fill: 'transparent',
+        text: '',
+        brush: ink.style,
+      });
+      drawRef.current = { id: element.id, origin: world, type: 'brush', points };
+      const elements = [...elementsRef.current, element];
+      elementsRef.current = elements;
+      dispatch({ type: 'begin' });
+      dispatch({ type: 'live', elements });
+      return;
+    }
     if (toolRef.current === 'text') {
       const element = addElement({
         type: 'text', name: 'Texto', x: world.x, y: world.y, width: 220, height: 48,
@@ -506,22 +888,27 @@ const PortfolioEditorPage = () => {
     }
     if (drawing) {
       const kind = toolRef.current === 'line' ? 'line' : shapeRef.current;
+      const route = arrowRouteRef.current;
       const element = createElement({
         type: kind,
-        name: kind === 'ellipse' ? 'Elipse' : kind === 'line' ? 'Línea' : kind === 'frame' ? 'Marco' : 'Rectángulo',
+        name: kind === 'ellipse' ? 'Elipse' : kind === 'line' ? 'Flecha' : kind === 'frame' ? 'Marco' : 'Rectángulo',
         x: world.x,
         y: world.y,
         width: 4,
         height: 4,
         text: '',
-        fill: kind === 'frame' ? 'transparent' : '#ffffff',
+        fill: kind === 'line' ? accent : kind === 'frame' ? 'transparent' : '#ffffff',
         stroke: accent,
-        strokeWidth: kind === 'line' || kind === 'frame' ? 2 : 0,
+        strokeWidth: kind === 'line' || kind === 'frame' ? 3 : 0,
         points: kind === 'line' ? [0, 0, 0, 0] : null,
+        route: kind === 'line' ? route : undefined,
+        bend: kind === 'line' && route === 'curve' ? 48 : 0,
       });
       drawRef.current = { id: element.id, origin: world, type: kind };
+      const elements = [...elementsRef.current, element];
+      elementsRef.current = elements;
       dispatch({ type: 'begin' });
-      dispatch({ type: 'live', elements: [...elementsRef.current, element] });
+      dispatch({ type: 'live', elements });
       return;
     }
     if (event.target === stage) {
@@ -547,8 +934,17 @@ const PortfolioEditorPage = () => {
     }
     if (drawRef.current && world) {
       const { id, origin, type } = drawRef.current;
-      if (type === 'line') {
-        live(id, { points: [0, 0, world.x - origin.x, world.y - origin.y] });
+      if (type === 'brush') {
+        const ink = brushRef.current;
+        const points = drawRef.current.points || [];
+        if (ink.style === 'spray') points.push(...sprayDots(world.x - origin.x, world.y - origin.y, ink.size, 7));
+        else points.push(world.x - origin.x, world.y - origin.y);
+        drawRef.current.points = points;
+        live(id, { points: points.slice() });
+      } else if (type === 'line') {
+        const points = [0, 0, world.x - origin.x, world.y - origin.y];
+        const route = arrowRouteRef.current;
+        live(id, { points, route, bend: route === 'curve' ? defaultBend(points) : 0 });
       } else {
         live(id, {
           x: Math.min(origin.x, world.x),
@@ -574,14 +970,18 @@ const PortfolioEditorPage = () => {
       dispatch({ type: 'touch' });
     }
     if (drawRef.current) {
+      const kind = drawRef.current.type;
       const element = elementsRef.current.find((item) => item.id === drawRef.current.id);
       const box = element ? elementBounds(element) : null;
       drawRef.current = null;
-      if (!box || (box.width < 6 && box.height < 6)) dispatch({ type: 'undo' });
+      const tiny = kind === 'brush'
+        ? (element?.points?.length || 0) < 4
+        : !box || (box.width < 6 && box.height < 6);
+      if (tiny) dispatch({ type: 'undo' });
       else {
         dispatch({ type: 'end' });
         setSelection([element.id]);
-        setTool('select');
+        if (kind !== 'brush') setTool('select');
       }
     }
     if (marquee) {
@@ -606,6 +1006,34 @@ const PortfolioEditorPage = () => {
     commit(state.elements.map((element) => (element.id === primary.id ? { ...element, ...partial } : element)));
   };
 
+  useDismiss(peopleOpen, () => setPeopleOpen(false), peopleRef);
+  useDismiss(shareOpen, () => setShareOpen(false), shareRef);
+
+  useEffect(() => {
+    const sync = () => setFull(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !user?.id || !hojaId) return undefined;
+    let alive = true;
+    const beat = async () => {
+      try {
+        const list = await portfolioRepository.presence(hojaId, user.id);
+        if (alive) setPeople(Array.isArray(list) ? list : []);
+      } catch {
+        /* La presencia se reintenta en el siguiente pulso. */
+      }
+    };
+    beat();
+    const timer = window.setInterval(beat, 8000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [ready, hojaId, user?.id]);
+
   const saveName = async () => {
     if (!meta?.canManage) return;
     const trimmed = name.trim() || 'Sin título';
@@ -613,6 +1041,100 @@ const PortfolioEditorPage = () => {
     if (trimmed === meta.name) return;
     const updated = await portfolioRepository.update(hojaId, { userId: user.id, name: trimmed });
     setMeta(updated);
+  };
+
+  const frames = state.elements
+    .filter((element) => element.type === 'frame' && element.visible !== false)
+    .slice()
+    .sort((a, b) => a.x - b.x || a.y - b.y);
+
+  const showFrame = (index) => {
+    const frame = frames[index];
+    const target = frame ? elementBounds(frame) : sceneBounds(state.elements.filter((element) => element.visible !== false));
+    if (target) fitBounds(target, 120);
+    const cast = frame
+      ? state.elements.filter((element) => element.id !== frame.id && intersects(elementBounds(element), elementBounds(frame)))
+      : state.elements;
+    cast.forEach(playMotion);
+  };
+
+  const startPresent = () => {
+    cameraMemory.current = { ...cameraRef.current };
+    setFrameIndex(0);
+    setPresenting(true);
+    presentingRef.current = true;
+    showFrame(0);
+    editorRef.current?.requestFullscreen?.().catch(() => {});
+  };
+
+  const stopPresent = () => {
+    setPresenting(false);
+    presentingRef.current = false;
+    if (cameraMemory.current) {
+      setCamera(cameraMemory.current);
+      cameraRef.current = cameraMemory.current;
+    }
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  };
+  stopPresentRef.current = stopPresent;
+
+  const stepFrame = (direction) => {
+    if (frames.length === 0) return;
+    const next = (frameIndex + direction + frames.length) % frames.length;
+    setFrameIndex(next);
+    const frame = frames[next];
+    fitBounds(elementBounds(frame), 120);
+    state.elements
+      .filter((element) => element.id !== frame.id && intersects(elementBounds(element), elementBounds(frame)))
+      .forEach(playMotion);
+  };
+  stepFrameRef.current = stepFrame;
+
+  const openShare = async () => {
+    setShareOpen(true);
+    setPeopleOpen(false);
+    setShareNote('');
+    if (!meta?.canManage) return;
+    try {
+      setAccess(await portfolioRepository.access(hojaId, user.id));
+    } catch (err) {
+      setShareNote(err.message || 'No se pudo abrir el acceso.');
+    }
+  };
+
+  const changeAccess = async (patch) => {
+    try {
+      const next = await portfolioRepository.updateAccess(hojaId, { userId: user.id, ...patch });
+      setAccess(next);
+      setShareNote('');
+      if (patch.visibility) setMeta((current) => current && ({ ...current, visibility: patch.visibility }));
+    } catch (err) {
+      setShareNote(err.message || 'No se pudo actualizar el acceso.');
+    }
+  };
+
+  const onPickImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const image = await readImageFile(file);
+      const height = Math.max(80, Math.round(280 * (image.height / image.width)));
+      insertElements([{ type: 'image', name: file.name, width: 280, height, src: image.src, text: '', fill: 'transparent' }]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const onPickFile = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.type.startsWith('image/')) {
+      onPickImage({ target: { files: [file], value: '' } });
+      return;
+    }
+    insertElements([{ type: 'file', name: file.name, width: 220, height: 72, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1, radius: 14, text: file.name, align: 'left', fontSize: 14 }]);
   };
 
   const statusLabel = status === 'saving' ? 'Guardando…' : status === 'offline' ? 'Sin conexión' : status === 'error' ? 'Error al guardar' : 'Guardado';
@@ -629,19 +1151,21 @@ const PortfolioEditorPage = () => {
   }
 
   return (
-    <div className="pf-editor">
+    <div className={`pf-editor${presenting ? ' is-presenting' : ''}`} ref={editorRef}>
       <header className="pf-top">
         <Link to="/portafolio" className="pf-icon-btn" aria-label="Volver a Portafolio" title="Volver a Portafolio"><ChevronLeft size={18} /></Link>
-        <input
-          className="pf-name"
-          value={name}
-          aria-label="Nombre de la hoja"
-          disabled={!meta?.canManage}
-          onChange={(event) => setName(event.target.value)}
-          onBlur={saveName}
-          onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-        />
-        <span className={`pf-status${status === 'error' ? ' is-error' : ''}`}>{ready ? statusLabel : 'Abriendo…'}</span>
+        <label className="pf-name-wrap">
+          <input
+            className="pf-name"
+            value={name}
+            aria-label="Nombre de la hoja"
+            disabled={!meta?.canManage}
+            onChange={(event) => setName(event.target.value)}
+            onBlur={saveName}
+            onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+          />
+          {meta?.canManage && <Pencil size={14} />}
+        </label>
         {meta && (
           <button
             type="button"
@@ -655,9 +1179,60 @@ const PortfolioEditorPage = () => {
             <Star size={16} fill={meta.favorite ? 'currentColor' : 'none'} />
           </button>
         )}
-        <button type="button" className="pf-mobile-inspector pf-tool" onClick={() => setInspectorOpen((open) => !open)}>Propiedades</button>
+        <span className={`pf-status${status === 'error' ? ' is-error' : ''}`}>{ready ? statusLabel : 'Abriendo…'}</span>
+        {error && <span className="pf-error text-xs font-semibold">{error}</span>}
+        <div className="pf-top-spacer" />
+        <div className="pf-presence" ref={peopleRef}>
+          <button type="button" className="pf-faces" aria-label="Personas en la hoja" aria-expanded={peopleOpen} onClick={() => { setPeopleOpen((open) => !open); setShareOpen(false); }}>
+            {people.slice(0, 3).map((person) => <Face key={person.id} person={person} />)}
+            {people.length > 3 && <span className="pf-more">+{people.length - 3}</span>}
+            {people.length === 0 && <Users size={16} />}
+          </button>
+          <div className={`pf-pop pf-people${peopleOpen ? ' is-open' : ''}`} role="dialog" aria-label="Personas en la hoja">
+            <p>En esta hoja ahora</p>
+            {people.length === 0 && <span className="pf-kicker">Conectando…</span>}
+            {people.map((person, index) => (
+              <div key={person.id} className="pf-person" style={{ '--i': index }}>
+                <Face person={person} />
+                <span>{person.name || person.email}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <button type="button" className="pf-present" onClick={presenting ? stopPresent : startPresent}>{presenting ? 'Salir' : 'Presentar'}</button>
+        <div className="pf-share-wrap" ref={shareRef}>
+          <button type="button" className="pf-share" aria-expanded={shareOpen} onClick={() => (shareOpen ? setShareOpen(false) : openShare())}><Share2 size={15} /> Compartir</button>
+          <SharePanel
+            open={shareOpen}
+            meta={meta}
+            access={access}
+            projects={projects}
+            email={shareEmail}
+            memberQuery={memberQuery}
+            note={shareNote}
+            hojaId={hojaId}
+            onEmail={setShareEmail}
+            onMemberQuery={setMemberQuery}
+            onClose={() => setShareOpen(false)}
+            onChange={changeAccess}
+            onLinkProject={async (projectId) => {
+              const updated = await portfolioRepository.update(hojaId, { userId: user.id, projectId });
+              setMeta(updated);
+              setAccess(await portfolioRepository.access(hojaId, user.id));
+            }}
+            onNote={setShareNote}
+          />
+        </div>
       </header>
       <div className="pf-body">
+        <EditorLibrary
+          open={libraryOpen}
+          section={librarySection}
+          onSection={setLibrarySection}
+          onToggle={() => setLibraryOpen((open) => !open)}
+          onInsert={insertElements}
+          uploads={uploads}
+        />
         <div className="pf-stage" ref={hostRef}>
           <div
             className="pf-dots"
@@ -684,7 +1259,15 @@ const PortfolioEditorPage = () => {
                 const stage = event.target.getStage();
                 while (node && node !== stage) {
                   const element = elementsRef.current.find((item) => item.id === node.id());
-                  if (element && element.type !== 'line') {
+                  if (element && element.type === 'link' && /^https?:\/\//i.test(element.href || '')) {
+                    window.open(element.href, '_blank', 'noopener,noreferrer');
+                    return;
+                  }
+                  if (element && element.type === 'video' && element.src) {
+                    setPlayer({ src: element.src, title: element.name });
+                    return;
+                  }
+                  if (element && element.type !== 'line' && element.type !== 'image') {
                     setEditingId(element.id);
                     return;
                   }
@@ -698,6 +1281,8 @@ const PortfolioEditorPage = () => {
                     key={element.id}
                     element={element}
                     tool={tool}
+                    selected={selection.length === 1 && selection[0] === element.id}
+                    scale={camera.scale}
                     editing={element.id === editingId}
                     accent={accent}
                     onSelect={(id, shift) => {
@@ -744,15 +1329,21 @@ const PortfolioEditorPage = () => {
           <div className="pf-toolbar" role="toolbar" aria-label="Herramientas">
             <button type="button" className={`pf-tool${tool === 'select' ? ' is-active' : ''}`} title="Selección (V)" onClick={() => { setTool('select'); setShapesOpen(false); }}><MousePointer2 size={16} /></button>
             <button type="button" className={`pf-tool${tool === 'hand' ? ' is-active' : ''}`} title="Mano (H)" onClick={() => { setTool('hand'); setShapesOpen(false); }}><Hand size={16} /></button>
-            <button type="button" className={`pf-tool${['rect', 'ellipse', 'line', 'frame'].includes(tool) ? ' is-active' : ''}`} title="Formas (R)" onClick={() => { setShapesOpen((open) => !open); setTool(shape); }}><Square size={16} /></button>
+            <button type="button" className={`pf-tool${['rect', 'ellipse', 'line', 'frame'].includes(tool) ? ' is-active' : ''}`} title="Figuras (R)" onClick={() => { setShapesOpen((open) => !open); setTool(shape); }}><Square size={16} /></button>
+            <button type="button" className={`pf-tool${tool === 'brush' ? ' is-active' : ''}`} title="Pincel (B)" onClick={() => { setTool('brush'); setShapesOpen(false); }}><PenLine size={16} /></button>
             <button type="button" className={`pf-tool${tool === 'text' ? ' is-active' : ''}`} title="Texto (T)" onClick={() => { setTool('text'); setShapesOpen(false); }}><Type size={16} /></button>
+            <button type="button" className="pf-tool" title="Imagen" onClick={() => imageInputRef.current?.click()}><ImageIcon size={16} /></button>
+            <button type="button" className="pf-tool" title="Tabla" onClick={() => insertElements([{ type: 'table', name: 'Tabla', width: 360, height: 160, rows: 3, cols: 3, cells: ['A', 'B', 'C', '', '', '', '', '', ''], fill: '#e7f6f1', text: '' }])}><Table2 size={16} /></button>
+            <button type="button" className="pf-tool" title="Post-it" onClick={() => insertElements([{ type: 'sticky', name: 'Post-it', width: 180, height: 160, fill: '#f8e7a2', text: 'Nota', radius: 6, fontSize: 16 }])}><StickyNote size={16} /></button>
+            <button type="button" className="pf-tool" title="Archivo" onClick={() => fileInputRef.current?.click()}><File size={16} /></button>
+            <button type="button" className="pf-tool" title="Enlace" onClick={() => insertElements([{ type: 'link', name: 'Enlace', width: 220, height: 52, fill: '#ffffff', stroke: '#cbd5e1', strokeWidth: 1, radius: 14, text: 'Abrir enlace', href: 'https://', align: 'left', fontSize: 15 }])}><Link2 size={16} /></button>
           </div>
           {shapesOpen && (
             <div className="pf-shapes">
               {[
                 ['rect', 'Rectángulo'],
                 ['ellipse', 'Elipse'],
-                ['line', 'Línea'],
+                ['line', 'Flecha'],
                 ['frame', 'Marco'],
               ].map(([id, label]) => (
                 <button key={id} type="button" className={`pf-tool${shape === id ? ' is-active' : ''}`} onClick={() => { setShape(id); setTool(id); setShapesOpen(false); }}>
@@ -761,76 +1352,187 @@ const PortfolioEditorPage = () => {
               ))}
             </div>
           )}
+          {tool === 'line' && !shapesOpen && (
+            <div className="pf-brush" role="group" aria-label="Estilo de flecha">
+              <div className="pf-choices">
+                {[
+                  ['straight', 'Recta'],
+                  ['curve', 'Curva'],
+                  ['elbow', 'Codo'],
+                ].map(([id, label]) => (
+                  <button key={id} type="button" className={arrowRoute === id ? 'is-active' : ''} aria-pressed={arrowRoute === id} onClick={() => setArrowRoute(id)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {tool === 'brush' && (
+            <div className="pf-brush" role="group" aria-label="Pincel">
+              <div className="pf-brush-styles">
+                {[
+                  ['brush', 'Pincel', PenLine],
+                  ['pencil', 'Lápiz', Pencil],
+                  ['spray', 'Aerosol', SprayCan],
+                  ['bucket', 'Cubeta', PaintBucket],
+                ].map(([id, label, Icon]) => (
+                  <button key={id} type="button" className={brush.style === id ? 'is-active' : ''} aria-pressed={brush.style === id} onClick={() => setBrush((current) => ({ ...current, style: id }))}>
+                    <Icon size={16} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+              {brush.style !== 'bucket' && (
+                <label className="pf-slider">
+                  <span>Tamaño</span>
+                  <input className="pf-range" type="range" min="1" max="48" value={brush.size} aria-label="Tamaño del pincel" onChange={(event) => setBrush((current) => ({ ...current, size: Number(event.target.value) }))} />
+                  <span className="pf-slider-value">{brush.size}</span>
+                </label>
+              )}
+              <div className="pf-swatches" role="listbox" aria-label="Color del pincel">
+                {INK_SWATCHES.map((color) => (
+                  <button key={color} type="button" className={brush.color.toLowerCase() === color ? 'is-active' : ''} style={{ background: color }} aria-label={color} aria-selected={brush.color.toLowerCase() === color} onClick={() => setBrush((current) => ({ ...current, color }))} />
+                ))}
+                <label className="pf-color" style={{ background: brush.color }} title="Otro color">
+                  <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(brush.color) ? brush.color : '#1e293b'} aria-label="Otro color" onChange={(event) => setBrush((current) => ({ ...current, color: event.target.value }))} />
+                </label>
+              </div>
+            </div>
+          )}
           <div className="pf-zoom">
+            <button type="button" className="pf-tool" aria-label="Deshacer" title="Deshacer (Ctrl+Z)" disabled={state.past.length === 0} onClick={() => dispatch({ type: 'undo' })}><Undo2 size={16} /></button>
+            <button type="button" className="pf-tool" aria-label="Rehacer" title="Rehacer (Ctrl+Shift+Z)" disabled={state.future.length === 0} onClick={() => dispatch({ type: 'redo' })}><Redo2 size={16} /></button>
+            <span className="pf-zoom-rule" />
             <button type="button" className="pf-tool" aria-label="Alejar" onClick={() => zoomBy(0.9)}><Minus size={16} /></button>
             <span className="px-1 text-xs font-bold tabular-nums">{Math.round(camera.scale * 100)}%</span>
             <button type="button" className="pf-tool" aria-label="Acercar" onClick={() => zoomBy(1.1)}><Plus size={16} /></button>
-            <button type="button" className="pf-tool" title="Ver todo" onClick={() => fit(false)}>Todo</button>
-            <button type="button" className="pf-tool" title="Ver selección" onClick={() => fit(true)}>Selección</button>
+            <span className="pf-zoom-rule" />
+            <button type="button" className="pf-tool" aria-label={full ? 'Salir de pantalla completa' : 'Pantalla completa'} onClick={() => (full ? document.exitFullscreen?.() : editorRef.current?.requestFullscreen?.())}>{full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
           </div>
+          {presenting && (
+            <div className="pf-present-bar">
+              <button type="button" className="pf-tool" aria-label="Marco anterior" onClick={() => stepFrame(-1)}>←</button>
+              <span>{frames.length ? `${frames[frameIndex]?.name || 'Marco'} · ${frameIndex + 1}/${frames.length}` : 'Lienzo completo'}</span>
+              <button type="button" className="pf-tool" aria-label="Marco siguiente" onClick={() => stepFrame(1)}>→</button>
+            </div>
+          )}
+          {!inspectorOpen && <button type="button" className="pf-reveal pf-reveal-right" onClick={() => setInspectorOpen(true)}>Diseño</button>}
+          <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={onPickImage} />
+          <input ref={fileInputRef} type="file" hidden onChange={onPickFile} />
+          {player && (
+            <div className="pf-player" role="dialog" aria-label={player.title}>
+              <button type="button" className="pf-icon-btn" aria-label="Cerrar video" onClick={() => setPlayer(null)}><X size={16} /></button>
+              <video src={player.src} controls autoPlay playsInline />
+            </div>
+          )}
         </div>
-        <aside className={`pf-inspector${inspectorOpen ? ' is-open' : ''}`}>
-          <h2>Propiedades</h2>
-          {error && <p className="pf-error text-xs font-semibold">{error}</p>}
-          {!primary && <p className="pf-kicker text-sm">{selectedElements.length > 1 ? `${selectedElements.length} elementos` : 'Nada seleccionado'}</p>}
-          {selectedElements.length > 1 && (
-            <div className="flex flex-wrap gap-1">
-              {[['left', 'Izquierda'], ['center', 'Centro'], ['right', 'Derecha'], ['top', 'Arriba'], ['middle', 'Medio'], ['bottom', 'Abajo']].map(([mode, label]) => (
-                <button key={mode} type="button" className="ps-quiet" onClick={() => commit(alignElements(state.elements, selection, mode))}>{label}</button>
-              ))}
-            </div>
-          )}
-          {primary && (
-            <div className="pf-stack flex flex-col gap-2">
-              <label>Nombre<input value={primary.name} onChange={(event) => updatePrimary({ name: event.target.value })} /></label>
-              <div className="pf-fields">
-                <label>X<input type="number" value={Math.round(primary.x)} onChange={(event) => updatePrimary({ x: Number(event.target.value) })} /></label>
-                <label>Y<input type="number" value={Math.round(primary.y)} onChange={(event) => updatePrimary({ y: Number(event.target.value) })} /></label>
-                {primary.type !== 'line' && <label>Ancho<input type="number" value={Math.round(primary.width)} onChange={(event) => updatePrimary({ width: Math.max(16, Number(event.target.value)) })} /></label>}
-                {primary.type !== 'line' && <label>Alto<input type="number" value={Math.round(primary.height)} onChange={(event) => updatePrimary({ height: Math.max(16, Number(event.target.value)) })} /></label>}
-                <label>Rotación<input type="number" value={Math.round(primary.rotation || 0)} onChange={(event) => updatePrimary({ rotation: Number(event.target.value) })} /></label>
-                <label>Opacidad<input type="number" min="0" max="1" step="0.05" value={primary.opacity ?? 1} onChange={(event) => updatePrimary({ opacity: Number(event.target.value) })} /></label>
-              </div>
-              <label>Color<input type="color" value={swatchValue} onChange={(event) => updatePrimary(primary.type === 'text' ? { textFill: event.target.value } : { fill: event.target.value })} /></label>
-              {primary.type !== 'line' && (
-                <>
-                  <label>Texto<textarea value={primary.text || ''} onChange={(event) => updatePrimary({ text: event.target.value })} /></label>
-                  <div className="pf-fields">
-                    <label>Tamaño<input type="number" value={primary.fontSize || 16} onChange={(event) => updatePrimary({ fontSize: Number(event.target.value) })} /></label>
-                    <label>Fuente
-                      <select value={primary.fontFamily} onChange={(event) => updatePrimary({ fontFamily: event.target.value })}>
-                        {FONTS.map((font) => <option key={font.label} value={font.value}>{font.label}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="flex gap-1">
-                    <button type="button" className={`ps-quiet${Number(primary.fontWeight) >= 700 ? ' is-active' : ''}`} onClick={() => updatePrimary({ fontWeight: Number(primary.fontWeight) >= 700 ? 500 : 700 })}>Negrita</button>
-                    <button type="button" className={`ps-quiet${primary.fontStyle === 'italic' ? ' is-active' : ''}`} onClick={() => updatePrimary({ fontStyle: primary.fontStyle === 'italic' ? 'normal' : 'italic' })}>Cursiva</button>
-                    {['left', 'center', 'right'].map((align) => (
-                      <button key={align} type="button" className={`ps-quiet${primary.align === align ? ' is-active' : ''}`} onClick={() => updatePrimary({ align })}>{align === 'left' ? 'Izq' : align === 'center' ? 'Centro' : 'Der'}</button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          <div className="pf-layers">
-            <h2>Capas</h2>
-            {[...state.elements].reverse().map((element) => (
-              <div key={element.id} className={`pf-layer${selection.includes(element.id) ? ' is-active' : ''}`}>
-                <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-semibold" onClick={() => setSelection([element.id])}>{element.name}</button>
-                <button type="button" className="pf-icon-btn" aria-label="Subir capa" onClick={() => moveLayer(state.elements, element.id, 1, commit)}><ArrowUp size={14} /></button>
-                <button type="button" className="pf-icon-btn" aria-label="Bajar capa" onClick={() => moveLayer(state.elements, element.id, -1, commit)}><ArrowDown size={14} /></button>
-                <button type="button" className="pf-icon-btn" aria-label={element.visible === false ? 'Mostrar' : 'Ocultar'} onClick={() => commit(state.elements.map((item) => item.id === element.id ? { ...item, visible: item.visible === false } : item))}>{element.visible === false ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-                <button type="button" className="pf-icon-btn" aria-label={element.locked ? 'Desbloquear' : 'Bloquear'} onClick={() => commit(state.elements.map((item) => item.id === element.id ? { ...item, locked: !item.locked } : item))}>{element.locked ? <Lock size={14} /> : <LockOpen size={14} />}</button>
-              </div>
-            ))}
-          </div>
-        </aside>
+        <EditorInspector
+          open={inspectorOpen}
+          tab={inspectorTab}
+          onTab={setInspectorTab}
+          onToggle={() => setInspectorOpen(false)}
+          primary={primary}
+          selectedElements={selectedElements}
+          elements={state.elements}
+          selection={selection}
+          fonts={FONTS}
+          swatchValue={swatchValue}
+          onUpdate={updatePrimary}
+          onCommit={commit}
+          onAlign={(mode) => commit(alignElements(state.elements, selection, mode))}
+          onSelect={(id) => setSelection([id])}
+          onLayer={(id, direction) => moveLayer(state.elements, id, direction, commit)}
+          onPreviewMotion={playMotion}
+        />
       </div>
     </div>
   );
 };
+
+function Face({ person }) {
+  const letter = (person.name || person.email || '?').trim().slice(0, 1).toUpperCase() || '?';
+  if (person.avatarUrl) return <img className="pf-face" src={person.avatarUrl} alt="" />;
+  return <span className="pf-face">{letter}</span>;
+}
+
+function SharePanel({
+  open, meta, access, projects, email, memberQuery, note, hojaId,
+  onEmail, onMemberQuery, onChange, onLinkProject, onNote,
+}) {
+  const members = (access?.projectMembers || []).filter((person) => {
+    const query = memberQuery.trim().toLowerCase();
+    if (!query) return true;
+    return `${person.name} ${person.email}`.toLowerCase().includes(query);
+  });
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/portafolio/${hojaId}`);
+      onNote('Enlace copiado.');
+    } catch {
+      onNote('No se pudo copiar el enlace.');
+    }
+  };
+  return (
+    <div className={`pf-pop pf-share-pop${open ? ' is-open' : ''}`} role="dialog" aria-label="Compartir hoja">
+      <button type="button" className="ps-quiet" onClick={copyLink}>Copiar enlace</button>
+      {!meta?.canManage ? (
+        <p className="pf-kicker">Solo quien creó la hoja puede cambiar quién entra.</p>
+      ) : (
+        <>
+          <div className="pf-segment" role="radiogroup" aria-label="Visibilidad">
+            <button type="button" className={(access?.visibility || meta?.visibility) !== 'enlace' ? 'is-active' : ''} onClick={() => onChange({ visibility: 'privada' })}>Privada</button>
+            <button type="button" className={(access?.visibility || meta?.visibility) === 'enlace' ? 'is-active' : ''} onClick={() => onChange({ visibility: 'enlace' })}>Con el enlace</button>
+          </div>
+          <p className="pf-kicker">{(access?.visibility || meta?.visibility) === 'enlace' ? 'Cualquier persona con sesión y el enlace puede verla. Editar sigue siendo de invitados y del equipo elegido.' : 'Solo tú, las personas invitadas y el equipo que elijas.'}</p>
+          <form onSubmit={(event) => { event.preventDefault(); if (!email.trim()) return; onChange({ addEmail: email.trim() }); onEmail(''); }}>
+            <label>Invitar por correo
+              <span className="pf-invite">
+                <input value={email} placeholder="correo@equipo.com" onChange={(event) => onEmail(event.target.value)} />
+                <button type="submit" className="ps-quiet">Invitar</button>
+              </span>
+            </label>
+          </form>
+          {(access?.invites || []).map((person) => (
+            <div key={person.id} className="pf-person">
+              <Face person={person} />
+              <span className="min-w-0 flex-1 truncate">{person.name || person.email}</span>
+              <button type="button" className="pf-icon-btn" aria-label={`Quitar a ${person.name || person.email}`} onClick={() => onChange({ removeUserId: person.id })}><X size={14} /></button>
+            </div>
+          ))}
+          <label>Proyecto vinculado
+            <select value={meta?.projectId || ''} onChange={(event) => onLinkProject(event.target.value ? Number(event.target.value) : null)}>
+              <option value="">Sin proyecto</option>
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </label>
+          {access?.projectId ? (
+            <>
+              <button type="button" className={`ps-quiet${!access.filterTeam ? ' is-active' : ''}`} onClick={() => onChange({ filterTeam: false })}>Todo el equipo</button>
+              <input value={memberQuery} placeholder="Filtrar personas del proyecto" aria-label="Filtrar personas del proyecto" onChange={(event) => onMemberQuery(event.target.value)} />
+              {members.map((person) => (
+                <label key={person.id} className="pf-check">
+                  <input
+                    type="checkbox"
+                    checked={access.filterTeam ? Boolean(person.included) : true}
+                    onChange={(event) => {
+                      const ids = (access.projectMembers || [])
+                        .filter((item) => (item.id === person.id ? event.target.checked : (access.filterTeam ? item.included : true)))
+                        .map((item) => item.id);
+                      onChange({ filterTeam: true, teamUserIds: ids });
+                    }}
+                  />
+                  <span>{person.name || person.email}</span>
+                </label>
+              ))}
+              {members.length === 0 && <p className="pf-kicker">Nadie del proyecto coincide con el filtro.</p>}
+            </>
+          ) : <p className="pf-kicker">Vincula un proyecto para elegir a quién del equipo le compartes la hoja.</p>}
+        </>
+      )}
+      {note && <p className="pf-kicker">{note}</p>}
+    </div>
+  );
+}
 
 function moveLayer(elements, id, direction, commit) {
   const index = elements.findIndex((element) => element.id === id);

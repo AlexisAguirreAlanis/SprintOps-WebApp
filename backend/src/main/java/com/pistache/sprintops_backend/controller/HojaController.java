@@ -4,6 +4,7 @@ import com.pistache.sprintops_backend.dto.HojaDTO;
 import com.pistache.sprintops_backend.service.HojaService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -63,6 +64,39 @@ public class HojaController {
     @PostMapping("/{id}/duplicar")
     public HojaDTO duplicate(@PathVariable Integer id, @RequestParam Integer userId) {
         return hojaService.duplicate(id, userId);
+    }
+
+    @GetMapping("/{id}/acceso")
+    public Map<String, Object> access(@PathVariable Integer id, @RequestParam Integer userId) {
+        return hojaService.access(id, userId);
+    }
+
+    @PutMapping("/{id}/acceso")
+    public Map<String, Object> updateAccess(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
+        return hojaService.updateAccess(
+                id,
+                intValue(body.get("userId")),
+                body.containsKey("visibility") ? stringValue(body.get("visibility")) : null,
+                boolValue(body.get("filterTeam")),
+                body.containsKey("teamUserIds") ? intList(body.get("teamUserIds")) : null,
+                body.containsKey("addEmail") ? stringValue(body.get("addEmail")) : null,
+                intValue(body.get("removeUserId")));
+    }
+
+    @PostMapping("/{id}/presencia")
+    public List<Map<String, Object>> pulse(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
+        return hojaService.pulse(id, intValue(body.get("userId")));
+    }
+
+    private static List<Integer> intList(Object value) {
+        List<Integer> ids = new ArrayList<>();
+        if (value instanceof List<?> list) {
+            for (Object item : list) {
+                Integer id = intValue(item);
+                if (id != null) ids.add(id);
+            }
+        }
+        return ids;
     }
 
     private static Integer intValue(Object value) {
