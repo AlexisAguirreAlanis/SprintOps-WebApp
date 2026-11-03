@@ -35,8 +35,10 @@
     "@xyflow/react": "^12.10.2",
     "classcat": "^5.0.5",
     "framer-motion": "^12.38.0",
+    "konva": "^10.9.1",
     "motion-dom": "^12.38.0",
     "motion-utils": "^12.38.0",
+    "react-konva": "^19.3.2",
     "recharts": "^3.8.0",
     "sonner": "^2.0.7",
     "zustand": "^5.0.11"

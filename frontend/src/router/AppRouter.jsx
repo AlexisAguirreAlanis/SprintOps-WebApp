@@ -16,6 +16,7 @@ import ProfilePage from '../features/profile/ProfilePage';
 import AppearancePage from '../features/settings/AppearancePage';
 import PlanPage from '../features/settings/PlanPage';
 import PortfolioPage from '../features/portfolio/PortfolioPage';
+import PortfolioEditorPage from '../features/portfolio/PortfolioEditorPage';
 import IssueUniversePage from '../features/issueUniverse/IssueUniversePage';
 import TimelinePage from '../features/timeline/TimelinePage';
 import TimeReportPage from '../features/time/TimeReportPage';
@@ -61,6 +62,7 @@ const AppRouter = () => {
         <Route path="settings/apariencia" element={<AppearancePage />} />
         <Route path="settings/plan" element={<PlanPage />} />
         <Route path="portafolio" element={<PortfolioPage />} />
+        <Route path="portafolio/:hojaId" element={<PortfolioEditorPage />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Route>
     </Routes>

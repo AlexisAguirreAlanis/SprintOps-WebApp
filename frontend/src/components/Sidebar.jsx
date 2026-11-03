@@ -138,9 +138,9 @@ const Sidebar = ({ open, onClose }) => {
             </div>
             <Link
               to="/portafolio"
-              aria-current={path === '/portafolio' ? 'page' : undefined}
+              aria-current={path === '/portafolio' || path.startsWith('/portafolio/') ? 'page' : undefined}
               title="Portafolio"
-              className={`ps-side-link ${path === '/portafolio' ? 'is-active' : ''}`}
+              className={`ps-side-link ${path === '/portafolio' || path.startsWith('/portafolio/') ? 'is-active' : ''}`}
               onClick={closeProjectSettings}
             >
               <Briefcase size={18} strokeWidth={1.75} />

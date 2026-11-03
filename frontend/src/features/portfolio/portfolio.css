@@ -1,0 +1,446 @@
+.pf-page {
+  color: var(--app-text);
+}
+
+.pf-kicker {
+  color: var(--app-muted);
+}
+
+.pf-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pf-metric {
+  text-align: left;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.pf-metric.is-active {
+  box-shadow: inset 0 0 0 2px var(--app-accent);
+}
+
+.pf-templates {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 2px 2px 8px;
+}
+
+.pf-template {
+  display: flex;
+  width: 168px;
+  flex: 0 0 168px;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 18px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  padding: 8px;
+  text-align: left;
+  color: var(--app-text);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.pf-template:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-text) 10%, transparent);
+}
+
+.pf-template-art {
+  height: 92px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-text) 4%, var(--app-bg));
+}
+
+.pf-template span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.pf-sheet {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: visible;
+  border-radius: 20px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  text-align: left;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.pf-sheet:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-text) 10%, transparent);
+}
+
+.pf-sheet-art {
+  height: 148px;
+  overflow: hidden;
+  border-radius: 20px 20px 0 0;
+  background:
+    radial-gradient(color-mix(in srgb, var(--app-text) 18%, transparent) 1px, transparent 1px) 0 0 / 16px 16px,
+    color-mix(in srgb, var(--app-text) 4%, var(--app-bg));
+}
+
+.pf-thumb {
+  width: 100%;
+  height: 100%;
+}
+
+.pf-thumb-empty {
+  background:
+    radial-gradient(color-mix(in srgb, var(--app-text) 18%, transparent) 1px, transparent 1px) 0 0 / 16px 16px;
+}
+
+.pf-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 14px;
+}
+
+.pf-sheet-title {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.pf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-list .pf-sheet {
+  flex-direction: row;
+  align-items: center;
+}
+
+.pf-list .pf-sheet-art {
+  width: 112px;
+  height: 72px;
+  flex: 0 0 112px;
+  border-radius: 16px 0 0 16px;
+}
+
+.pf-list .pf-sheet-body {
+  flex: 1;
+}
+
+.pf-star.is-on {
+  color: var(--app-accent);
+}
+
+.pf-editor {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--app-bg);
+  color: var(--app-text);
+}
+
+.pf-top {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+  padding: 8px 12px;
+}
+
+.pf-name {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.pf-name:focus {
+  outline: none;
+}
+
+.pf-status {
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pf-status.is-error,
+.pf-error {
+  color: var(--oracle-red, #c74634);
+}
+
+.pf-body {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+}
+
+.pf-stage {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.pf-dots {
+  position: absolute;
+  inset: 0;
+  background-color: var(--app-bg);
+  background-image: radial-gradient(color-mix(in srgb, var(--app-text) 28%, transparent) 1.15px, transparent 1.2px);
+}
+
+.pf-toolbar,
+.pf-zoom,
+.pf-shapes {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface);
+  padding: 6px;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--app-text) 12%, transparent);
+}
+
+.pf-toolbar {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.pf-zoom {
+  right: 14px;
+  bottom: 14px;
+}
+
+.pf-shapes {
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 160px;
+}
+
+.pf-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--app-muted);
+}
+
+.pf-tool.is-active,
+.pf-tool:hover {
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
+  color: var(--app-accent);
+}
+
+.pf-shapes .pf-tool {
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pf-inspector {
+  display: flex;
+  width: 280px;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  border-left: 1px solid var(--app-border);
+  background: var(--app-surface);
+  padding: 14px;
+}
+
+.pf-inspector h2,
+.pf-label {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pf-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pf-fields label,
+.pf-stack label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pf-fields input,
+.pf-fields select,
+.pf-stack input,
+.pf-stack textarea,
+.pf-stack select {
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg);
+  color: var(--app-text);
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.pf-stack textarea {
+  height: 72px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.pf-layers {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pf-layer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  padding: 6px;
+  text-align: left;
+}
+
+.pf-layer.is-active {
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
+}
+
+.pf-layer span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pf-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--app-muted);
+}
+
+.pf-text-editor {
+  position: absolute;
+  z-index: 4;
+  margin: 0;
+  resize: none;
+  border: 1px solid var(--app-accent);
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  color: var(--app-text);
+  padding: 0;
+  line-height: 1.2;
+}
+
+.pf-mobile-inspector {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .pf-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .pf-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pf-inspector {
+    position: absolute;
+    z-index: 6;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateX(105%);
+    transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -12px 0 30px color-mix(in srgb, var(--app-text) 12%, transparent);
+  }
+
+  .pf-inspector.is-open {
+    transform: translateX(0);
+  }
+
+  .pf-mobile-inspector {
+    display: inline-flex;
+  }
+
+  .pf-toolbar {
+    max-width: calc(100% - 24px);
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .pf-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .pf-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .pf-top {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-metric,
+  .pf-template,
+  .pf-sheet,
+  .pf-inspector,
+  .pf-templates {
+    transition: none;
+    scroll-behavior: auto;
+  }
+}
