@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
   Check,
@@ -6,6 +6,7 @@ import {
   Clock3,
   Folder,
   FolderPlus,
+  Calendar,
   Filter,
   LayoutGrid,
   List,
@@ -18,6 +19,7 @@ import ProjectGrid from './ProjectGrid';
 import ProjectListView from './ProjectListView';
 import ProjectCompactView from './ProjectCompactView';
 import ProjectScroll from './ProjectScroll';
+import FilterSelect from './FilterSelect';
 import CreateProjectModal from './CreateProjectModal';
 import JoinProjectModal from '../../components/ui/JoinProjectModal';
 import { useAuth } from '../auth/hooks/useAuth';
@@ -36,10 +38,31 @@ import {
 } from './projectModel';
 
 const VIEWS = [
-  { id: 'grid', label: 'Cuadrícula', icon: LayoutGrid },
-  { id: 'list', label: 'Lista', icon: List },
+  { id: 'grid', label: 'Vista en tarjeta', icon: LayoutGrid },
+  { id: 'list', label: 'Vista en lista', icon: List },
   { id: 'compact', label: 'Vista compacta', icon: Rows3 },
 ];
+
+const PHASE_FILTERS = [
+  { value: 'any', label: 'Cualquiera' },
+  { value: 'active', label: 'En curso' },
+  { value: 'upcoming', label: 'Próximo' },
+  { value: 'completed', label: 'Completado' },
+  { value: 'paused', label: 'En pausa' },
+  { value: 'archived', label: 'Archivado' },
+];
+
+const OWNERSHIP_FILTERS = [
+  { value: 'any', label: 'Todos' },
+  { value: 'own', label: 'Proyectos propios' },
+  { value: 'shared', label: 'Proyectos compartidos' },
+];
+
+const ROLE_LABELS = {
+  developer: 'Developer',
+  scrumMaster: 'Scrum Master',
+  productOwner: 'Product Owner',
+};
 
 const METRICS = [
   { id: 'all', label: 'Proyectos', icon: Folder, pick: (counts) => counts.all },
@@ -54,6 +77,7 @@ const HomePage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [openField, setOpenField] = useState(null);
   const [tab, setTab] = useState('all');
   const [sortId, setSortId] = useState('activity');
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -64,6 +88,10 @@ const HomePage = () => {
   useDismiss(createOpen, () => setCreateOpen(false), createRef);
   useDismiss(sortOpen, () => setSortOpen(false), sortRef);
   useDismiss(filterOpen, () => setFilterOpen(false), filterRef);
+
+  useEffect(() => {
+    if (!filterOpen) setOpenField(null);
+  }, [filterOpen]);
 
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -117,11 +145,10 @@ const HomePage = () => {
                   type="button"
                   className={selected ? 'is-active' : ''}
                   aria-pressed={selected}
-                  title={item.label}
                   onClick={() => setView(item.id)}
                 >
                   <Icon size={16} />
-                  <span className="sr-only">{item.label}</span>
+                  <span className="ps-view-label"><span>{item.label}</span></span>
                 </button>
               );
             })}
@@ -134,7 +161,7 @@ const HomePage = () => {
               </button>
               <button
                 type="button"
-                className="ps-primary-caret"
+                className={`ps-primary-caret${createOpen ? ' is-open' : ''}`}
                 aria-label="Más acciones de proyecto"
                 aria-expanded={createOpen}
                 onClick={() => setCreateOpen((open) => !open)}
@@ -142,22 +169,26 @@ const HomePage = () => {
                 <ChevronDown size={16} />
               </button>
             </div>
-            {createOpen && (
-              <div className="ps-popover right-0 w-56" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="ps-menu-item"
-                  onClick={() => {
-                    setCreateOpen(false);
-                    setShowJoinModal(true);
-                  }}
-                >
-                  <FolderPlus size={16} />
-                  Unirse a un proyecto
-                </button>
-              </div>
-            )}
+            <div
+              className={`ps-popover ps-join-pop right-0 w-56${createOpen ? ' is-open' : ''}`}
+              role="menu"
+              aria-hidden={!createOpen}
+              inert={!createOpen}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="ps-menu-item"
+                tabIndex={createOpen ? 0 : -1}
+                onClick={() => {
+                  setCreateOpen(false);
+                  setShowJoinModal(true);
+                }}
+              >
+                <FolderPlus size={16} />
+                Unirse a un proyecto
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -199,29 +230,38 @@ const HomePage = () => {
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={sortRef}>
-            <button type="button" className="ps-quiet" aria-expanded={sortOpen} onClick={() => setSortOpen((open) => !open)}>
+            <button
+              type="button"
+              className={`ps-quiet ps-sort-toggle${sortOpen ? ' is-open' : ''}`}
+              aria-expanded={sortOpen}
+              onClick={() => setSortOpen((open) => !open)}
+            >
               Ordenar: {SORTS.find((item) => item.id === sortId)?.label}
               <ChevronDown size={14} />
             </button>
-            {sortOpen && (
-              <div className="ps-popover right-0 w-56" role="menu">
-                {SORTS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={sortId === item.id}
-                    className={`ps-menu-item ${sortId === item.id ? 'is-active' : ''}`}
-                    onClick={() => {
-                      setSortId(item.id);
-                      setSortOpen(false);
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div
+              className={`ps-popover ps-sort-pop right-0 w-56${sortOpen ? ' is-open' : ''}`}
+              role="menu"
+              aria-hidden={!sortOpen}
+              inert={!sortOpen}
+            >
+              {SORTS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={sortId === item.id}
+                  tabIndex={sortOpen ? 0 : -1}
+                  className={`ps-menu-item ${sortId === item.id ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setSortId(item.id);
+                    setSortOpen(false);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="relative" ref={filterRef}>
             <button
@@ -233,49 +273,89 @@ const HomePage = () => {
             >
               <Filter size={16} />
             </button>
-            {filterOpen && (
-              <div className="ps-popover right-0 w-72 p-3">
+            <div
+              className={`ps-popover ps-filter-pop right-0 w-80 p-3${filterOpen ? ' is-open' : ''}`}
+              aria-hidden={!filterOpen}
+              inert={!filterOpen}
+              onMouseDown={(event) => {
+                if (!event.target.closest('.ps-filter-field')) setOpenField(null);
+              }}
+            >
+              <FilterSelect
+                label="Estado"
+                value={filters.phase}
+                options={PHASE_FILTERS}
+                open={openField === 'phase'}
+                onToggle={() => setOpenField((current) => (current === 'phase' ? null : 'phase'))}
+                onChange={(phase) => {
+                  setFilters((prev) => ({ ...prev, phase }));
+                  setOpenField(null);
+                }}
+              />
+              <FilterSelect
+                label="Rol en el proyecto"
+                value={filters.role}
+                options={[
+                  { value: 'any', label: 'Cualquiera' },
+                  ...roles.map((role) => ({ value: role, label: ROLE_LABELS[role] || role })),
+                ]}
+                open={openField === 'role'}
+                onToggle={() => setOpenField((current) => (current === 'role' ? null : 'role'))}
+                onChange={(role) => {
+                  setFilters((prev) => ({ ...prev, role }));
+                  setOpenField(null);
+                }}
+              />
+              <FilterSelect
+                label="Pertenencia"
+                value={filters.ownership}
+                options={OWNERSHIP_FILTERS}
+                open={openField === 'ownership'}
+                onToggle={() => setOpenField((current) => (current === 'ownership' ? null : 'ownership'))}
+                onChange={(ownership) => {
+                  setFilters((prev) => ({ ...prev, ownership }));
+                  setOpenField(null);
+                }}
+              />
+              <div className="grid grid-cols-2 gap-2">
                 <label className="ps-field">
-                  Estado
-                  <select value={filters.phase} onChange={(event) => setFilters((prev) => ({ ...prev, phase: event.target.value }))}>
-                    <option value="any">Cualquiera</option>
-                    <option value="active">En curso</option>
-                    <option value="upcoming">Próximo</option>
-                    <option value="completed">Completado</option>
-                    <option value="paused">En pausa</option>
-                    <option value="archived">Archivado</option>
-                  </select>
+                  Desde
+                  <span className="ps-filter-date">
+                    <input
+                      type="date"
+                      className={filters.from ? 'has-value' : ''}
+                      value={filters.from}
+                      onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
+                    />
+                    <span className="ps-filter-date-hint">Cualquiera</span>
+                    <Calendar size={14} />
+                  </span>
                 </label>
                 <label className="ps-field">
-                  Rol en el proyecto
-                  <select value={filters.role} onChange={(event) => setFilters((prev) => ({ ...prev, role: event.target.value }))}>
-                    <option value="any">Cualquiera</option>
-                    {roles.map((role) => <option key={role} value={role}>{role}</option>)}
-                  </select>
+                  Hasta
+                  <span className="ps-filter-date">
+                    <input
+                      type="date"
+                      className={filters.to ? 'has-value' : ''}
+                      value={filters.to}
+                      onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}
+                    />
+                    <span className="ps-filter-date-hint">Cualquiera</span>
+                    <Calendar size={14} />
+                  </span>
                 </label>
-                <label className="ps-field">
-                  Pertenencia
-                  <select value={filters.ownership} onChange={(event) => setFilters((prev) => ({ ...prev, ownership: event.target.value }))}>
-                    <option value="any">Todos</option>
-                    <option value="own">Proyectos propios</option>
-                    <option value="shared">Proyectos compartidos</option>
-                  </select>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="ps-field">
-                    Desde
-                    <input type="date" value={filters.from} onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))} />
-                  </label>
-                  <label className="ps-field">
-                    Hasta
-                    <input type="date" value={filters.to} onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))} />
-                  </label>
-                </div>
-                <button type="button" className="ps-quiet mt-2 w-full justify-center" onClick={() => setFilters(EMPTY_FILTERS)}>
-                  Limpiar filtros
-                </button>
               </div>
-            )}
+              <button
+                type="button"
+                className="ps-quiet mt-2 w-full justify-center"
+                onClick={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setOpenField(null);
+                }}
+              >
+                Limpiar filtros
+              </button>
+            </div>
           </div>
         </div>
       </div>

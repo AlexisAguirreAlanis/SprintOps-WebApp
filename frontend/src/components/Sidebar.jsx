@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChartColumn, ChevronDown, ChevronLeft, CircleUser, Folder, House, LogOut, Palette, Settings, X } from 'lucide-react';
+import { Briefcase, ChartColumn, ChevronDown, ChevronLeft, CircleUser, Folder, House, LogOut, Palette, Settings, X } from 'lucide-react';
 import Avatar from './Avatar';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useProjects } from '../features/project/hooks/useProjects';
@@ -136,6 +136,16 @@ const Sidebar = ({ open, onClose }) => {
                 </div>
               </div>
             </div>
+            <Link
+              to="/portafolio"
+              aria-current={path === '/portafolio' ? 'page' : undefined}
+              title="Portafolio"
+              className={`ps-side-link ${path === '/portafolio' ? 'is-active' : ''}`}
+              onClick={closeProjectSettings}
+            >
+              <Briefcase size={18} strokeWidth={1.75} />
+              <span className="ps-side-label">Portafolio</span>
+            </Link>
             </div>
             <div className="ps-nav-pane ps-nav-pane--settings" inert={showSettings ? undefined : true}>
               <button type="button" className="ps-side-back" onClick={closeSettings}>

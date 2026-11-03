@@ -73,9 +73,9 @@ const ProjectScroll = ({ children }) => {
     <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
       <div
         ref={viewportRef}
-        className="scroll-edge-fade no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pr-4 pb-2"
+        className="scroll-edge-fade no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pr-4"
       >
-        <div ref={contentRef} className="min-w-0">
+        <div ref={contentRef} className="min-w-0 px-2 pb-10 pt-3">
           {children}
         </div>
       </div>
