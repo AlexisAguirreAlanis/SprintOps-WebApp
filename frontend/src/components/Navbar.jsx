@@ -1,103 +1,94 @@
-import { useState } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { ChevronDown, CircleUser, CreditCard, GitPullRequest, Palette, Settings } from 'lucide-react';
-import Avatar from './Avatar';
+import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Bell, Menu } from 'lucide-react';
 import SearchBar from './SearchBar';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useDismiss } from '../features/home/useDismiss';
+import { notificationsRepository } from '../data/repositories/notificationsRepository';
 
-const SETTINGS_ITEMS = [
-  { id: 'general', label: 'General', icon: Settings },
-  { id: 'perfil', label: 'Perfil', icon: CircleUser, to: '/profile' },
-  { id: 'apariencia', label: 'Apariencia', icon: Palette, to: '/settings/apariencia' },
-  { id: 'plan', label: 'Plan y uso', icon: CreditCard },
-  { id: 'git', label: 'Git & PRs', icon: GitPullRequest },
-];
+const Navbar = ({ onSearch, searchQuery, onOpenNav }) => {
+  const { user } = useAuth();
+  const [notesOpen, setNotesOpen] = useState(false);
+  const notesRef = useRef(null);
+  useDismiss(notesOpen, () => setNotesOpen(false), notesRef);
 
-const Navbar = ({ onSearch }) => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const isHome = location.pathname === '/home' || location.pathname === '/projects';
+  const notes = (() => {
+    try {
+      return notificationsRepository.getByUserId(user?.id) || [];
+    } catch {
+      return [];
+    }
+  })();
+  const unread = notes.filter((note) => !note.read).length;
 
-  const [settingsOpen, setSettingsOpen] = useState(true);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const openSettingsItem = (item) => {
-    if (!item.to) return;
-    navigate(item.to);
-  };
-  
   return (
-    <nav className="app-header h-[70px] px-10 flex items-center sticky top-0 z-40 shadow-sm justify-between">
-      <Link to="/home" className="flex h-full shrink-0 items-center cursor-pointer py-1.5 pr-4">
-        <img
-          src="/logo-pistache.png"
-          alt="Pistache"
-          className="h-12 w-auto max-h-[58px] object-contain object-left"
-        />
-      </Link>
+    <header className="app-header sticky top-0 z-40">
+      <div className="flex min-w-0 flex-wrap items-center gap-3 px-4 py-3 md:px-6">
+        <button
+          type="button"
+          className="ps-header-btn ps-nav-toggle"
+          aria-label="Abrir navegación"
+          onClick={onOpenNav}
+        >
+          <Menu size={20} />
+        </button>
 
-      {isHome && (
-        <div className="hidden md:flex flex-1 justify-center px-4">
-          <SearchBar onSearch={onSearch} />
+        <Link to="/home" className="ps-brand-lockup flex shrink-0 items-center gap-2 py-1" aria-label="Pistache">
+          <span className="ps-brand" aria-hidden="true">
+            <span className="ps-brand-ink" />
+            <span className="ps-brand-leaf" />
+          </span>
+          <span className="ps-product-badge">SprintOps</span>
+        </Link>
+
+        <div className="order-last w-full min-w-0 md:order-none md:flex md:flex-1 md:justify-center md:px-4">
+          <SearchBar onSearch={onSearch} value={searchQuery} />
         </div>
-      )}
 
-      <div className="flex items-center gap-6 min-w-[200px] justify-end">        
-        <div className="relative group">
-          <button className="flex items-center gap-3 transition-all hover:opacity-80">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold">{user?.name || 'Usuario'}</p>
-              <p className="text-[10px] tracking-widest opacity-70">{user?.email || ''}</p>
-            </div>
-            <Avatar name={user?.name} avatarUrl={user?.avatarUrl} className="border-2 border-white/20" />
-          </button>
-
-          {/* User Menu Dropdown */}
-          <div className="absolute right-0 mt-2 w-60 origin-top-right scale-95 rounded-xl border border-gray-100 bg-white py-1.5 opacity-0 shadow-xl invisible transition-all duration-200 group-hover:visible group-hover:scale-100 group-hover:opacity-100 z-50">
+        <div className="ml-auto flex items-center gap-2">
+          <div className="relative" ref={notesRef}>
             <button
               type="button"
-              onClick={() => setSettingsOpen((open) => !open)}
-              className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-sm font-bold text-slate-800 hover:bg-slate-50"
-              aria-expanded={settingsOpen}
+              className="ps-header-btn"
+              aria-label={unread ? `Notificaciones, ${unread} sin leer` : 'Notificaciones'}
+              aria-expanded={notesOpen}
+              onClick={() => setNotesOpen((open) => !open)}
             >
-              Ajustes
-              <ChevronDown size={16} className={`text-slate-400 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
+              <Bell size={18} />
+              {unread > 0 && <span className="ps-dot" aria-hidden="true" />}
             </button>
-            {settingsOpen && (
-              <div className="pb-1">
-                {SETTINGS_ITEMS.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => openSettingsItem(item)}
-                      className="flex w-full items-center gap-2.5 py-2 pl-5 pr-3.5 text-left text-sm font-semibold text-slate-600 hover:bg-[#67BFA1]/10 hover:text-slate-800"
-                    >
-                      <Icon size={16} className="shrink-0 text-[#67BFA1]" />
-                      {item.label}
-                    </button>
-                  );
-                })}
+            {notesOpen && (
+              <div className="ps-popover right-0 w-72" role="menu">
+                <p className="px-3 py-2 text-sm font-bold">Notificaciones</p>
+                {notes.length === 0 ? (
+                  <p className="ps-muted px-3 pb-3 text-sm">No hay notificaciones.</p>
+                ) : (
+                  <ul className="max-h-72 overflow-y-auto">
+                    {notes.map((note) => (
+                      <li key={note.id}>
+                        <button
+                          type="button"
+                          className="ps-menu-item w-full"
+                          onClick={() => {
+                            if (!note.read) notificationsRepository.markAsRead(note.id);
+                            setNotesOpen(false);
+                          }}
+                        >
+                          <span className="min-w-0 text-left">
+                            <span className="block truncate font-semibold">{note.title || note.message || 'Notificación'}</span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
-            <div className="mx-3 my-1 border-t border-gray-100" />
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="w-full px-3.5 py-2.5 text-left text-sm font-black text-oracle-red hover:bg-red-50"
-            >
-              Cerrar Sesión
-            </button>
           </div>
+
         </div>
       </div>
-    </nav>
+    </header>
   );
 };
 

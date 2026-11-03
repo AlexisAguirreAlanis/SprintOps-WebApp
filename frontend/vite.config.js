@@ -1,3 +1,4 @@
+import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
@@ -42,6 +43,16 @@ export default defineConfig({
       'classcat',
       'zustand',
     ],
+  },
+  server: {
+    proxy: {
+      // Spring escucha en IPv6 cuando otro proceso (p. ej. el emulador) ocupa 127.0.0.1:8080.
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        agent: new http.Agent({ family: 6, keepAlive: true }),
+      },
+    },
   },
   optimizeDeps: {
     include: [

@@ -53,11 +53,13 @@ public class ProyectoController {
     private SprintRepository sprintRepository;
     @Autowired
     private JoinCodeRateLimiter joinCodeRateLimiter;
+    @Autowired
+    private IssuesRepository issuesRepository;
 
     @GetMapping
     public List<ProyectoDTO> getAll() {
         return proyectoService.findAll().stream()
-                .map(ProyectoDTO::fromEntity)
+                .map(p -> toDashboardDto(p, null))
                 .collect(Collectors.toList());
     }
 
@@ -132,8 +134,68 @@ public class ProyectoController {
         // Get all projects from those equipos
         return proyectoService.findAll().stream()
                 .filter(p -> p.getEquipo() != null && equipoIds.contains(p.getEquipo().getIdEquipo()))
-                .map(ProyectoDTO::fromEntity)
+                .map(p -> toDashboardDto(p, userId))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Datos de la card: equipo, rol de quien consulta y avance por issues.
+     * Si no hay issues, progress queda null.
+     */
+    private ProyectoDTO toDashboardDto(Proyecto proyecto, Integer viewerId) {
+        ProyectoDTO dto = ProyectoDTO.fromEntity(proyecto);
+        dto.setMembersPreview(List.of());
+        dto.setMemberCount(0);
+        dto.setIssuesTotal(0);
+        dto.setIssuesDone(0);
+        try {
+            if (proyecto.getEquipo() != null) {
+                Integer equipoId = proyecto.getEquipo().getIdEquipo();
+                List<InfoUsuarioEquipo> memberships = infoUsuarioEquipoRepository.findByEquipoIdEquipo(equipoId);
+                Map<Integer, String> roleMap = new HashMap<>();
+                for (RolesDeUsuarios entry : rolesDeUsuariosRepository.findByEquipoIdEquipo(equipoId)) {
+                    if (entry.getUsuario() != null && entry.getRol() != null) {
+                        roleMap.put(entry.getUsuario().getIdUsuario(), entry.getRol().getNombreRol());
+                    }
+                }
+                List<MiembroEquipoDTO> preview = new ArrayList<>();
+                for (InfoUsuarioEquipo membership : memberships) {
+                    Usuario person = membership.getUsuario();
+                    if (person == null) continue;
+                    if (preview.size() < 4) {
+                        MiembroEquipoDTO member = new MiembroEquipoDTO();
+                        member.setUserId(person.getIdUsuario());
+                        member.setName(person.getNombreUsuario());
+                        member.setAvatarUrl(person.getAvatarUrl());
+                        member.setRole(roleMap.get(person.getIdUsuario()));
+                        preview.add(member);
+                    }
+                    if (viewerId != null && viewerId.equals(person.getIdUsuario())) {
+                        dto.setMyRole(roleMap.getOrDefault(viewerId, "Miembro"));
+                    }
+                }
+                dto.setMembersPreview(preview);
+                dto.setMemberCount(memberships.size());
+            }
+
+            List<Issues> issues = issuesRepository.findAllBelongingToProject(proyecto.getIdProyecto());
+            int done = 0;
+            LocalDate last = null;
+            for (Issues issue : issues) {
+                if ("done".equalsIgnoreCase(issue.getEstadoIssue())) done++;
+                LocalDate mark = issue.getFechaFinIssue() != null
+                        ? issue.getFechaFinIssue()
+                        : issue.getFechaCreacionIssue();
+                if (mark != null && (last == null || mark.isAfter(last))) last = mark;
+            }
+            dto.setIssuesTotal(issues.size());
+            dto.setIssuesDone(done);
+            dto.setProgress(issues.isEmpty() ? null : (int) Math.round(done * 100.0 / issues.size()));
+            dto.setLastActivity(last);
+        } catch (RuntimeException ignored) {
+            dto.setProgress(null);
+        }
+        return dto;
     }
 
     @GetMapping("/{id}/miembros")

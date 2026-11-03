@@ -26,6 +26,16 @@ public class ProyectoDTO {
     private BigDecimal tarifaHora;
     private BigDecimal margenUtilidad;
 
+    /** Issues del proyecto. progress es null cuando no hay issues: no se inventa un porcentaje. */
+    private Integer issuesTotal;
+    private Integer issuesDone;
+    private Integer progress;
+    /** Fecha más reciente entre creación y fin de issues. Null si no hay actividad registrada. */
+    private LocalDate lastActivity;
+    private Integer memberCount;
+    private String myRole;
+    private java.util.List<MiembroEquipoDTO> membersPreview;
+
     public static ProyectoDTO fromEntity(Proyecto p) {
         ProyectoDTO dto = new ProyectoDTO();
         dto.setId(p.getIdProyecto());

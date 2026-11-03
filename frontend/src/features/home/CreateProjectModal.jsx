@@ -76,7 +76,7 @@ const CreateProjectModal = ({ isOpen, onClose, onCreate }) => {
     {!showCodeModal && (
     <AnimatedPopup open={isOpen}>
       <div className="popup-overlay fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="popup-panel bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[calc(var(--app-h,900px)*0.92)] flex flex-col">
+        <div className="popup-panel flex max-h-[calc(var(--app-h,900px)-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
           <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50">
             <h2 className="text-xl font-black text-gray-800 tracking-tight">Crear Nuevo Proyecto</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -84,7 +84,9 @@ const CreateProjectModal = ({ isOpen, onClose, onCreate }) => {
             </button>
           </div>
           
-          <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4 overflow-y-auto">
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
+            <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 md:gap-6">
+            <div className="flex flex-col gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Nombre del Proyecto</label>
               <input 
@@ -99,7 +101,7 @@ const CreateProjectModal = ({ isOpen, onClose, onCreate }) => {
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Descripción</label>
               <textarea 
                 required
-                className="w-full p-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#67BFA1] bg-gray-50 resize-none h-24"
+                className="h-24 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 p-4 focus:outline-none focus:ring-2 focus:ring-[#67BFA1]"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Breve descripción del proyecto..."
@@ -133,10 +135,11 @@ const CreateProjectModal = ({ isOpen, onClose, onCreate }) => {
               </div>
             </div>
             <p className="text-xs text-slate-400 -mt-2">Desde hoy y hasta dentro de 3 años.</p>
+            </div>
 
             <div>
               <p className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Modo del proyecto</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 {MODES.map((option) => {
                   const active = modo === option.id;
                   return (
@@ -162,9 +165,8 @@ const CreateProjectModal = ({ isOpen, onClose, onCreate }) => {
                   );
                 })}
               </div>
-            </div>
 
-            <label className={`flex items-start gap-3 rounded-xl border p-3 ${
+            <label className={`mt-3 flex items-start gap-3 rounded-xl border p-3 ${
               modo === 'tiempo' ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'
             }`}>
               <input
@@ -181,9 +183,11 @@ const CreateProjectModal = ({ isOpen, onClose, onCreate }) => {
                 </span>
               </span>
             </label>
+            </div>
+            </div>
             
             {formError && <p className="text-sm font-medium text-red-600">{formError}</p>}
-            <div className="mt-2 flex gap-3">
+            <div className="flex gap-3">
               <button type="button" onClick={onClose} className="flex-1 h-12 bg-gray-100 text-slate-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">
                 Cancelar
               </button>

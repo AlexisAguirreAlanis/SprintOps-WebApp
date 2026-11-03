@@ -1,30 +1,34 @@
-import React, { useState } from 'react';
+import { useEffect, useId } from 'react';
 import { Search } from 'lucide-react';
 
-const SearchBar = ({ onSearch }) => {
-  const [query, setQuery] = useState('');
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '');
 
-  const handleChange = (e) => {
-    const value = e.target.value;
-    setQuery(value);
-    if (onSearch) {
-      onSearch(value);
-    }
-  };
+const SearchBar = ({ onSearch, value = '' }) => {
+  const inputId = useId();
+
+  useEffect(() => {
+    const onKey = (event) => {
+      const shortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
+      if (!shortcut) return;
+      event.preventDefault();
+      document.getElementById(inputId)?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [inputId]);
 
   return (
-    <div className="relative w-[550px]">
+    <div className="ps-search">
+      <Search size={16} aria-hidden="true" />
       <input
-        type="text"
-        placeholder="Busqueda"
-        value={query}
-        onChange={handleChange}
-        className="w-full h-10 px-12 rounded-full bg-white text-gray-700 text-sm focus:outline-none placeholder:text-gray-400"
+        id={inputId}
+        type="search"
+        value={value}
+        placeholder="Buscar proyectos…"
+        aria-label="Buscar proyectos"
+        onChange={(event) => onSearch?.(event.target.value)}
       />
-      <Search 
-        size={18} 
-        className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" 
-      />
+      <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
     </div>
   );
 };

@@ -1,37 +1,38 @@
 import { useState, useEffect, useCallback } from 'react';
 import { projectsRepository } from '../../../data/repositories/projectsRepository';
 import { API_BASE } from '../../../data/api/apiClient';
-import { DEFAULT_PROJECT_CARD_IMAGE } from '../defaultProjectCardImage';
 
 function buildCardImageUrl(project) {
   if (project.cardCoverCustom) {
     const v = project.cardCoverVersion ?? 0;
     return `${API_BASE}/proyectos/${project.id}/card-cover?v=${v}`;
   }
-  return DEFAULT_PROJECT_CARD_IMAGE;
+  return null;
 }
 
 const enrichProject = (project) => {
+  const progress = Number.isFinite(project.progress) ? project.progress : null;
   return {
     ...project,
-    progress: project.progress ?? 0,
-    status: project.status ?? 'Active',
-    start: project.start ?? '2026-04-01',
-    end: project.end ?? '2026-04-30',
-    tasksTotal: project.tasksTotal ?? 0,
-    tasksCompleted: project.tasksCompleted ?? 0,
-    tasksLate: project.tasksLate ?? 0,
+    progress,
+    status: project.status || 'A',
+    start: project.start || null,
+    end: project.end || null,
+    issuesTotal: Number.isFinite(project.issuesTotal) ? project.issuesTotal : null,
+    issuesDone: Number.isFinite(project.issuesDone) ? project.issuesDone : null,
+    membersPreview: Array.isArray(project.membersPreview) ? project.membersPreview : [],
+    memberCount: Number.isFinite(project.memberCount) ? project.memberCount : (project.membersPreview?.length || 0),
     image: buildCardImageUrl(project),
-    colorOverlay: project.colorOverlay ?? 'rgba(68, 110, 81, 0.7)',
   };
 };
 
 export const useProjects = (userId) => {
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
+    setError(null);
     try {
       let data = [];
       if (userId) {
@@ -42,7 +43,7 @@ export const useProjects = (userId) => {
       setProjects((data || []).map(enrichProject));
     } catch (err) {
       console.error('Error fetching projects:', err);
-      setProjects([]);
+      setError(err);
     } finally {
       setIsLoading(false);
     }
@@ -61,5 +62,5 @@ export const useProjects = (userId) => {
     return project ? enrichProject(project) : null;
   };
 
-  return { projects, isLoading, addProject, getProject, refetch: fetchData };
+  return { projects, isLoading, error, addProject, getProject, refetch: fetchData };
 };

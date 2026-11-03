@@ -50,8 +50,17 @@
   }
 
   .app-header {
-    background-color: var(--app-header);
+    background-color: transparent;
     color: var(--app-header-text);
+  }
+
+  .app-shell {
+    background: var(--app-header);
+    color: var(--app-header-text);
+  }
+
+  .app-panel {
+    border-top-left-radius: 28px;
   }
 
   .app-viewport {
@@ -78,59 +87,105 @@
     pointer-events: none;
   }
 
-  /*
-   * Scrollbars discretas: invisibles en reposo; visibles al pasar el ratón / foco
-   * o mientras haces scroll (clase `scrollbar-reveal`, vía useScrollbarRevealOnScroll).
-   */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
+}
+
+/* La barra nativa de macOS no acepta la cápsula. La pinta AppScrollbar. */
+* {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+.app-scrollbar {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+  touch-action: none;
+}
+
+.app-scrollbar.is-on {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.app-scrollbar.is-drag {
+  cursor: grabbing;
+}
+
+.app-scrollbar-face {
+  position: absolute;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--app-surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 10%, transparent);
+  opacity: 0;
+  transform: scale(0.35);
+  transform-origin: center;
+  transition:
+    transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1),
+    opacity 200ms ease;
+}
+
+.app-scrollbar.is-on .app-scrollbar-face {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@starting-style {
+  .app-scrollbar.is-on .app-scrollbar-face {
+    opacity: 0;
+    transform: scale(0.35);
   }
+}
 
-  *::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
-  }
+.app-scrollbar:not(.is-x) .app-scrollbar-face {
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 8px;
+}
 
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
+.app-scrollbar.is-x .app-scrollbar-face {
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 8px;
+}
 
-  *::-webkit-scrollbar-thumb {
-    background-color: transparent;
-    border-radius: 9999px;
-    border: 1.5px solid transparent;
-    background-clip: padding-box;
-    transition: background-color 0.2s ease;
-  }
+.app-scrollbar-pill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-muted) 78%, var(--app-surface));
+  transition: background-color 140ms ease;
+}
 
-  *:is(:hover, :focus-within)::-webkit-scrollbar-thumb,
-  .scrollbar-reveal::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.42);
-  }
+.app-scrollbar.is-x .app-scrollbar-pill {
+  top: 0;
+  bottom: 0;
+  left: auto;
+  right: auto;
+}
 
-  *:is(:hover, :focus-within)::-webkit-scrollbar-thumb:hover,
-  .scrollbar-reveal::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100, 116, 139, 0.55);
-  }
+.app-scrollbar.is-hot .app-scrollbar-pill {
+  background: var(--app-accent);
+}
 
-  *:is(:hover, :focus-within),
-  .scrollbar-reveal {
-    scrollbar-color: rgba(148, 163, 184, 0.42) transparent;
-  }
+.app-scrollbar.is-drag .app-scrollbar-pill {
+  background: var(--app-accent-hover);
+}
 
-  *::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-
-  @media (hover: none) {
-    .scrollbar-reveal::-webkit-scrollbar-thumb {
-      background-color: rgba(148, 163, 184, 0.38);
-    }
-
-    .scrollbar-reveal {
-      scrollbar-color: rgba(148, 163, 184, 0.38) transparent;
-    }
+@media (prefers-reduced-motion: reduce) {
+  .app-scrollbar-face,
+  .app-scrollbar.is-on .app-scrollbar-face {
+    transform: none;
+    transition: none;
   }
 }
 
@@ -346,5 +401,1067 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+/*
+ * Desvanecimiento de scroll por máscara de transparencia.
+ * El blanco del gradiente es opacidad de la máscara, no un color pintado:
+ * funciona igual con cualquier paleta, fondo claro u oscuro.
+ */
+@property --fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.scroll-edge-fade {
+  --fade-size: 64px;
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  transition:
+    --fade-top 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    --fade-bottom 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgb(255 255 255 / 0.08) calc(var(--fade-top) * 0.22),
+    rgb(255 255 255 / 0.4) calc(var(--fade-top) * 0.55),
+    rgb(255 255 255 / 0.82) calc(var(--fade-top) * 0.82),
+    #fff var(--fade-top),
+    #fff calc(100% - var(--fade-bottom)),
+    rgb(255 255 255 / 0.82) calc(100% - var(--fade-bottom) * 0.82),
+    rgb(255 255 255 / 0.4) calc(100% - var(--fade-bottom) * 0.55),
+    rgb(255 255 255 / 0.08) calc(100% - var(--fade-bottom) * 0.22),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    rgb(255 255 255 / 0.08) calc(var(--fade-top) * 0.22),
+    rgb(255 255 255 / 0.4) calc(var(--fade-top) * 0.55),
+    rgb(255 255 255 / 0.82) calc(var(--fade-top) * 0.82),
+    #fff var(--fade-top),
+    #fff calc(100% - var(--fade-bottom)),
+    rgb(255 255 255 / 0.82) calc(100% - var(--fade-bottom) * 0.82),
+    rgb(255 255 255 / 0.4) calc(100% - var(--fade-bottom) * 0.55),
+    rgb(255 255 255 / 0.08) calc(100% - var(--fade-bottom) * 0.22),
+    transparent 100%
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-mode: alpha;
+  mask-mode: alpha;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-edge-fade {
+    transition: none;
+  }
+}
+
+.ps-page {
+  color: var(--app-text);
+}
+
+.ps-muted {
+  color: var(--app-muted);
+}
+
+.ps-product-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-accent) 22%, transparent);
+  color: color-mix(in srgb, var(--app-accent) 78%, var(--app-header-text));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.ps-brand {
+  position: relative;
+  display: block;
+  height: 32px;
+  aspect-ratio: 300 / 62;
+}
+
+.ps-brand-ink,
+.ps-brand-leaf {
+  position: absolute;
+  inset: 0;
+  background: var(--app-header-text);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: left center;
+  mask-position: left center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.ps-brand-ink {
+  -webkit-mask-image: url('/pistache-mark-ink.png');
+  mask-image: url('/pistache-mark-ink.png');
+}
+
+.ps-brand-leaf {
+  background: var(--app-accent);
+  -webkit-mask-image: url('/pistache-mark-leaf.png');
+  mask-image: url('/pistache-mark-leaf.png');
+}
+
+.ps-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 560px);
+  height: 40px;
+  padding: 0 8px 0 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--app-header-text) 18%, transparent);
+  background: color-mix(in srgb, var(--app-header-text) 8%, transparent);
+  color: var(--app-header-text);
+  transition: border-color 180ms ease, background 180ms ease;
+}
+
+.ps-search:hover,
+.ps-search:focus-within {
+  border-color: color-mix(in srgb, var(--app-accent) 70%, transparent);
+  background: color-mix(in srgb, var(--app-header-text) 12%, transparent);
+}
+
+.ps-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+}
+
+.ps-search input::placeholder {
+  color: color-mix(in srgb, var(--app-header-text) 58%, transparent);
+}
+
+.ps-search kbd {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: color-mix(in srgb, var(--app-header-text) 78%, transparent);
+  background: color-mix(in srgb, var(--app-header-text) 10%, transparent);
+}
+
+.ps-header-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  color: var(--app-header-text);
+  transition: background 180ms ease;
+}
+
+.ps-header-btn:hover,
+.ps-header-btn:focus-visible {
+  background: color-mix(in srgb, var(--app-header-text) 12%, transparent);
+}
+
+@media (min-width: 768px) {
+  .ps-nav-toggle {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ps-brand-lockup {
+    box-sizing: border-box;
+    width: 208px;
+    margin-left: -12px;
+    padding-left: 6px;
+    justify-content: space-between;
+  }
+
+  .ps-brand-lockup .ps-brand {
+    height: 25px;
+    margin-left: -1px;
+  }
+
+  .ps-brand-lockup .ps-product-badge {
+    height: 20px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+}
+
+.ps-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--app-accent);
+}
+
+.ps-sidebar {
+  display: flex;
+  width: 232px;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 12px;
+  background: transparent;
+  color: var(--app-header-text);
+}
+
+@media (min-width: 768px) {
+  .ps-sidebar {
+    height: 100%;
+  }
+}
+
+.ps-side-link,
+.ps-side-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: color-mix(in srgb, var(--app-header-text) 74%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.ps-side-link:hover,
+.ps-side-btn:hover,
+.ps-side-link:focus-visible {
+  background: color-mix(in srgb, var(--app-header-text) 8%, transparent);
+  color: var(--app-header-text);
+}
+
+.ps-side-link.is-active {
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+  color: var(--app-header-text);
+}
+
+.ps-side-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border-radius: 12px;
+  color: color-mix(in srgb, var(--app-header-text) 62%, transparent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ps-side-back:hover,
+.ps-side-back:focus-visible {
+  background: color-mix(in srgb, var(--app-header-text) 8%, transparent);
+  color: var(--app-header-text);
+}
+
+.ps-side-logout {
+  color: #f3b4ac;
+}
+
+.ps-side-logout:hover,
+.ps-side-logout:focus-visible {
+  background: color-mix(in srgb, #c74634 28%, transparent);
+  color: #fff;
+}
+
+.ps-account {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--app-header-text) 12%, transparent);
+}
+
+.ps-account-drop {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms ease;
+}
+
+.ps-account-drop.is-open {
+  grid-template-rows: 1fr;
+}
+
+.ps-account-drop-inner {
+  overflow: hidden;
+}
+
+.ps-account-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ps-account-card {
+  display: flex;
+  min-width: 0;
+  min-height: 52px;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  text-align: left;
+  color: var(--app-header-text);
+}
+
+.ps-account-card:hover,
+.ps-account-card:focus-visible,
+.ps-account-card.is-open {
+  background: color-mix(in srgb, var(--app-header-text) 8%, transparent);
+}
+
+.ps-account-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.ps-account-name,
+.ps-account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ps-account-name {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ps-account-email {
+  font-size: 11px;
+  line-height: 1.3;
+  color: color-mix(in srgb, var(--app-header-text) 62%, transparent);
+}
+
+.ps-account-gear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  color: color-mix(in srgb, var(--app-header-text) 74%, transparent);
+}
+
+.ps-account-gear:hover,
+.ps-account-gear:focus-visible {
+  background: color-mix(in srgb, var(--app-header-text) 8%, transparent);
+  color: var(--app-header-text);
+}
+
+.ps-account-gear.is-active {
+  background: color-mix(in srgb, var(--app-accent) 30%, transparent);
+  color: var(--app-header-text);
+}
+
+.ps-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  border: 0;
+  background: color-mix(in srgb, var(--app-text) 35%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.ps-drawer-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (max-width: 767px) {
+  .ps-sidebar {
+    position: fixed;
+    z-index: 50;
+    inset: 0 auto 0 0;
+    background: var(--app-header);
+    transform: translateX(-105%);
+    transition: transform 220ms ease;
+  }
+
+  .ps-sidebar.is-open {
+    transform: translateX(0);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ps-sidebar {
+    width: 72px;
+    padding-inline: 10px;
+  }
+
+  .ps-side-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .ps-side-link {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .ps-account-row {
+    flex-direction: column;
+  }
+
+  .ps-account-copy {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .ps-account-card,
+  .ps-account-gear {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+.ps-card,
+.ps-metric,
+.ps-compact,
+.ps-list,
+.ps-empty,
+.ps-popover,
+.ps-menu {
+  background: var(--app-surface);
+  color: var(--app-text);
+  border: 1px solid var(--app-border);
+}
+
+.ps-metric,
+.ps-compact,
+.ps-list,
+.ps-card {
+  border-radius: 20px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.ps-metric {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 92px;
+  padding: 16px 18px;
+}
+
+.ps-metric-icon,
+.ps-empty > svg {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
+  color: var(--app-accent);
+}
+
+.ps-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+.ps-card:hover,
+.ps-compact:hover,
+.ps-list-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-text) 10%, transparent);
+}
+
+.ps-card:focus-visible,
+.ps-compact:focus-visible,
+.ps-list-row:focus-visible,
+.ps-primary:focus-visible,
+.ps-quiet:focus-visible,
+.ps-side-link:focus-visible,
+.ps-side-back:focus-visible,
+.ps-account-card:focus-visible,
+.ps-account-gear:focus-visible,
+.ps-header-btn:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.ps-card-media {
+  position: relative;
+  aspect-ratio: 1.9 / 1;
+  background: color-mix(in srgb, var(--app-text) 8%, var(--app-surface));
+}
+
+.ps-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 250ms ease;
+}
+
+.ps-card:hover .ps-card-image {
+  transform: scale(1.03);
+}
+
+.ps-card-shade {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--app-accent) 22%, transparent);
+  pointer-events: none;
+}
+
+.ps-cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background-color: var(--app-accent);
+}
+
+.ps-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 46%;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--app-text) 32%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+.ps-card-media > .ps-cover {
+  position: absolute;
+  inset: 0;
+}
+
+.ps-cover--photo {
+  background-color: color-mix(in srgb, var(--app-accent) 72%, var(--app-surface));
+}
+
+.ps-cover--photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 250ms ease;
+}
+
+.ps-card:hover .ps-cover--photo img {
+  transform: scale(1.03);
+}
+
+.ps-cover--0 {
+  background-image:
+    radial-gradient(circle at 16% 24%, color-mix(in srgb, var(--app-on-accent) 34%, transparent) 0 16%, transparent 17%),
+    radial-gradient(circle at 78% 18%, color-mix(in srgb, var(--app-on-accent) 18%, transparent) 0 10%, transparent 11%),
+    radial-gradient(circle at 84% 78%, color-mix(in srgb, var(--app-on-accent) 26%, transparent) 0 22%, transparent 23%);
+}
+
+.ps-cover--1 {
+  background-image: repeating-linear-gradient(
+    118deg,
+    color-mix(in srgb, var(--app-on-accent) 20%, transparent) 0 12px,
+    transparent 12px 26px
+  );
+}
+
+.ps-cover--2 {
+  background-image: radial-gradient(color-mix(in srgb, var(--app-on-accent) 42%, transparent) 1.5px, transparent 1.7px);
+  background-size: 18px 18px;
+}
+
+.ps-cover--3 {
+  background-image:
+    linear-gradient(30deg, color-mix(in srgb, var(--app-on-accent) 18%, transparent) 12%, transparent 12.5% 87%, color-mix(in srgb, var(--app-on-accent) 18%, transparent) 87.5%),
+    linear-gradient(150deg, color-mix(in srgb, var(--app-on-accent) 14%, transparent) 12%, transparent 12.5% 87%, color-mix(in srgb, var(--app-on-accent) 14%, transparent) 87.5%);
+  background-size: 32px 54px;
+}
+
+.ps-cover--4 {
+  background-image:
+    radial-gradient(ellipse at 0% 100%, color-mix(in srgb, var(--app-on-accent) 28%, transparent), transparent 52%),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--app-on-accent) 22%, transparent), transparent 48%),
+    repeating-radial-gradient(circle at 50% 50%, transparent 0 14px, color-mix(in srgb, var(--app-on-accent) 16%, transparent) 15px 16px);
+}
+
+.ps-cover--5 {
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 18px, color-mix(in srgb, var(--app-on-accent) 16%, transparent) 18px 19px),
+    repeating-linear-gradient(0deg, transparent 0 18px, color-mix(in srgb, var(--app-on-accent) 16%, transparent) 18px 19px);
+}
+
+.ps-card-fallback {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  font-size: 42px;
+  font-weight: 800;
+  color: var(--app-on-accent);
+  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-hover));
+}
+
+.ps-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.ps-card-desc {
+  display: -webkit-box;
+  min-height: 2.6em;
+  margin-top: 6px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--app-muted);
+}
+
+.ps-mode {
+  align-self: flex-start;
+  margin-top: 10px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--app-accent) 12%, var(--app-surface));
+  color: var(--app-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ps-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  width: max-content;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(8px);
+}
+
+.ps-badge--active {
+  border-color: transparent;
+  background: var(--app-accent);
+  color: var(--app-on-accent);
+}
+
+.ps-badge--upcoming {
+  color: var(--app-accent);
+}
+
+.ps-badge--on-media {
+  z-index: 1;
+  background: var(--app-surface);
+  color: var(--app-text);
+  border-color: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--app-text) 22%, transparent),
+    0 8px 16px color-mix(in srgb, var(--app-text) 18%, transparent);
+}
+
+.ps-badge--on-media.ps-badge--active,
+.ps-badge--on-media.ps-badge--upcoming {
+  background: var(--app-surface);
+  color: var(--app-accent);
+}
+
+.ps-badge--completed,
+.ps-badge--paused,
+.ps-badge--archived,
+.ps-badge--other {
+  color: var(--app-muted);
+}
+
+.ps-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  color: var(--app-text);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--app-text) 16%, transparent);
+}
+
+.ps-icon-btn:hover,
+.ps-icon-btn:focus-visible {
+  background: var(--app-surface);
+}
+
+.ps-avatar-ring {
+  display: inline-flex;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--app-surface);
+}
+
+.ps-avatar-fallback {
+  background: color-mix(in srgb, var(--app-accent) 82%, var(--app-text));
+  color: var(--app-on-accent);
+}
+
+.ps-avatar-more {
+  margin-left: 6px;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ps-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
+}
+
+.ps-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--app-accent);
+  transition: width 220ms ease;
+}
+
+.ps-list-head,
+.ps-list-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) 140px 150px 140px 140px 40px;
+  gap: 12px;
+  align-items: center;
+}
+
+.ps-list-head {
+  padding: 12px 16px;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ps-list {
+  overflow: hidden;
+}
+
+.ps-list-row {
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  cursor: pointer;
+  border-top: 1px solid var(--app-border);
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.ps-list-row:hover {
+  background: color-mix(in srgb, var(--app-accent) 6%, var(--app-surface));
+}
+
+.ps-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.ps-view-switch {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.ps-view-switch button,
+.ps-quiet,
+.ps-primary,
+.ps-primary-caret,
+.ps-menu-item {
+  transition: background 180ms ease, color 180ms ease, opacity 180ms ease;
+}
+
+.ps-view-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border-radius: 10px;
+  color: var(--app-muted);
+}
+
+.ps-view-switch button.is-active,
+.ps-menu-item.is-active,
+.ps-quiet.is-active {
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
+  color: var(--app-accent);
+}
+
+.ps-split {
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-accent) 28%, transparent);
+}
+
+.ps-primary,
+.ps-primary-caret {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  background: var(--app-accent);
+  color: var(--app-on-accent);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ps-primary {
+  padding: 0 16px;
+}
+
+.ps-primary:hover,
+.ps-primary-caret:hover {
+  background: var(--app-accent-hover);
+}
+
+.ps-primary-caret {
+  padding: 0 10px;
+  border-left: 1px solid color-mix(in srgb, var(--app-on-accent) 28%, transparent);
+}
+
+.ps-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ps-quiet:hover,
+.ps-menu-item:hover {
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
+}
+
+.ps-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.ps-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px 10px;
+  margin-right: 14px;
+  border-bottom: 2px solid transparent;
+  color: var(--app-muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color 180ms ease, border-color 180ms ease;
+}
+
+.ps-tabs button span {
+  color: color-mix(in srgb, var(--app-muted) 80%, transparent);
+  font-size: 12px;
+}
+
+.ps-tabs button.is-active {
+  border-bottom-color: var(--app-accent);
+  color: var(--app-text);
+}
+
+.ps-popover,
+.ps-menu {
+  position: absolute;
+  z-index: 40;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--app-text) 16%, transparent);
+}
+
+.ps-menu {
+  position: fixed;
+  margin-top: 0;
+  width: 224px;
+}
+
+.ps-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.ps-menu-item-danger {
+  color: var(--oracle-red, #c74634);
+}
+
+.ps-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--app-border);
+}
+
+.ps-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ps-field select,
+.ps-field input {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--app-border);
+  background: var(--app-bg);
+  color: var(--app-text);
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ps-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 20px;
+  border-radius: 20px;
+  border-style: dashed;
+  text-align: center;
+}
+
+.ps-empty h2 {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.ps-empty p {
+  max-width: 360px;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+
+.ps-skeleton {
+  border-radius: 20px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--app-text) 6%, var(--app-surface)),
+    color-mix(in srgb, var(--app-text) 12%, var(--app-surface)),
+    color-mix(in srgb, var(--app-text) 6%, var(--app-surface))
+  );
+  background-size: 200% 100%;
+  animation: ps-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes ps-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (max-width: 1023px) {
+  .ps-list-head {
+    display: none;
+  }
+
+  .ps-list-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ps-card,
+  .ps-card-image,
+  .ps-compact,
+  .ps-list-row,
+  .ps-progress > span,
+  .ps-sidebar,
+  .ps-account-drop,
+  .ps-skeleton,
+  .ps-tabs button,
+  .ps-view-switch button,
+  .ps-primary,
+  .ps-quiet {
+    transition: none;
+    animation: none;
+  }
+
+  .ps-card:hover,
+  .ps-card:hover .ps-card-image,
+  .ps-compact:hover,
+  .ps-list-row:hover {
+    transform: none;
   }
 }

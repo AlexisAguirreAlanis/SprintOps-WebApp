@@ -37,6 +37,7 @@ const SprintFlow = ({ sprints, onSprintClick, projectId }) => {
       onMouseLeave={handleMouseLeave}
       onMouseUp={handleMouseUp}
       onMouseMove={handleMouseMove}
+      data-hide-scrollbar
       className={`w-full flex justify-start items-center gap-12 overflow-x-auto pb-12 pt-8 px-20 no-scrollbar select-none cursor-grab active:cursor-grabbing`}
     >
       <div className="flex items-center gap-12 mx-auto">

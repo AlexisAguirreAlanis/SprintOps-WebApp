@@ -1,9 +1,8 @@
-import React from 'react';
 import ProjectCard from '../../components/ProjectCard';
 
 const ProjectGrid = ({ projects, onSelect, userId, onCoverUpdated }) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       {projects.map((project) => (
         <ProjectCard
           key={project.id}

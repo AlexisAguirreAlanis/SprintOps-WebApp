@@ -1,78 +1,141 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { 
-  Home, 
-  Layers, 
-  Calendar, 
-  CheckSquare, 
-  BarChart2, 
-  Users, 
-  Settings,
-  LogOut
-} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ChartColumn, ChevronLeft, CircleUser, Folder, LogOut, Palette, Settings, X } from 'lucide-react';
+import Avatar from './Avatar';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useDismiss } from '../features/home/useDismiss';
 
-const Sidebar = () => {
-  const { logout } = useAuth();
+const MAIN = [
+  { to: '/home', label: 'Proyectos', icon: Folder, match: ['/home', '/projects'] },
+];
 
-  const menuItems = [
-    { icon: Home, label: 'Inicio', path: '/home' },
-    { icon: Layers, label: 'Proyectos', path: '/projects' },
-    { icon: Calendar, label: 'Sprints', path: '/sprints' },
-    { icon: CheckSquare, label: 'Tareas', path: '/tasks' },
-    { icon: BarChart2, label: 'Métricas', path: '/metrics' },
-    { icon: Users, label: 'Equipo', path: '/team' },
-  ];
+const SETTINGS = [
+  { to: '/profile', label: 'Perfil', icon: CircleUser, match: ['/profile'] },
+  { to: '/settings/apariencia', label: 'Apariencia', icon: Palette, match: ['/settings/apariencia'] },
+  { to: '/settings/plan', label: 'Plan & Uso', icon: ChartColumn, match: ['/settings/plan'] },
+];
+
+const isMatch = (item, path) => item.match.some((candidate) => path === candidate);
+
+const Sidebar = ({ open, onClose }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const path = location.pathname;
+  const previousPath = useRef(path);
+  const accountRef = useRef(null);
+  const onSettingsRoute = SETTINGS.some((item) => isMatch(item, path));
+  const [settingsHeld, setSettingsHeld] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const showSettings = onSettingsRoute || settingsHeld;
+
+  useDismiss(accountOpen, () => setAccountOpen(false), accountRef);
+
+  useEffect(() => {
+    if (!onSettingsRoute) setSettingsHeld(false);
+  }, [path, onSettingsRoute]);
+
+  useEffect(() => {
+    if (previousPath.current === path) return;
+    previousPath.current = path;
+    setAccountOpen(false);
+    onClose?.();
+  }, [path, onClose]);
+
+  const closeSettings = () => {
+    setSettingsHeld(false);
+    setAccountOpen(false);
+    if (onSettingsRoute) navigate('/home');
+  };
+
+  const signOut = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const links = showSettings ? SETTINGS : MAIN;
 
   return (
-    <aside className="sticky top-0 flex h-full w-64 flex-col border-r border-gray-100 bg-white">
-      <div className="p-6 flex-1">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Principal</p>
-        <nav className="space-y-1">
-          {menuItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) => `
-                flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
-                ${isActive 
-                  ? 'bg-red-50 text-oracle-red font-bold' 
-                  : 'text-slate-500 hover:bg-gray-50 hover:text-slate-900'}
-              `}
+    <>
+      <button
+        type="button"
+        className={`ps-drawer-backdrop md:hidden ${open ? 'is-open' : ''}`}
+        aria-label="Cerrar navegación"
+        onClick={onClose}
+      />
+      <aside className={`ps-sidebar ${open ? 'is-open' : ''}`} aria-label="Navegación">
+        <div className="mb-2 flex items-center justify-between px-3 md:hidden">
+          <p className="text-sm font-semibold">Menú</p>
+          <button type="button" className="ps-side-btn" aria-label="Cerrar menú" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+          {showSettings && (
+            <button type="button" className="ps-side-back" onClick={closeSettings}>
+              <ChevronLeft size={18} strokeWidth={1.75} />
+              <span className="ps-side-label">Ajustes</span>
+            </button>
+          )}
+          {links.map((item) => {
+            const Icon = item.icon;
+            const active = isMatch(item, path);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                aria-current={active ? 'page' : undefined}
+                title={item.label}
+                className={`ps-side-link ${active ? 'is-active' : ''}`}
+              >
+                <Icon size={18} strokeWidth={1.75} />
+                <span className="ps-side-label">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="ps-account" ref={accountRef}>
+          <div className={`ps-account-drop ${accountOpen ? 'is-open' : ''}`}>
+            <div className="ps-account-drop-inner" inert={accountOpen ? undefined : true}>
+              <button type="button" className="ps-side-link ps-side-logout" onClick={signOut}>
+                <LogOut size={18} strokeWidth={1.75} />
+                <span className="ps-side-label">Cerrar sesión</span>
+              </button>
+            </div>
+          </div>
+          <div className="ps-account-row">
+            <button
+              type="button"
+              className={`ps-account-card ${accountOpen ? 'is-open' : ''}`}
+              aria-expanded={accountOpen}
+              aria-label="Cuenta"
+              onClick={() => setAccountOpen((value) => !value)}
             >
-              <item.icon size={20} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-10 mb-6">Preferencias</p>
-        <nav className="space-y-1">
-          <NavLink
-            to="/settings"
-            className={({ isActive }) => `
-              flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
-              ${isActive 
-                ? 'bg-red-50 text-oracle-red font-bold' 
-                : 'text-slate-500 hover:bg-gray-50 hover:text-slate-900'}
-            `}
-          >
-            <Settings size={20} />
-            <span>Configuración</span>
-          </NavLink>
-        </nav>
-      </div>
-
-      <div className="p-6 border-t border-gray-100">
-        <button 
-          onClick={logout}
-          className="flex items-center gap-3 px-4 py-3 w-full text-slate-500 hover:text-oracle-red hover:bg-red-50 rounded-xl transition-all duration-200"
-        >
-          <LogOut size={20} />
-          <span className="font-bold">Cerrar Sesión</span>
-        </button>
-      </div>
-    </aside>
+              <Avatar name={user?.name} avatarUrl={user?.avatarUrl} size="sm" />
+              <span className="ps-account-copy">
+                <span className="ps-account-name">{user?.name || 'Usuario'}</span>
+                <span className="ps-account-email">{user?.email || ''}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`ps-account-gear ${showSettings ? 'is-active' : ''}`}
+              aria-label="Ajustes"
+              aria-pressed={showSettings}
+              title="Ajustes"
+              onClick={() => {
+                setAccountOpen(false);
+                if (showSettings) closeSettings();
+                else setSettingsHeld(true);
+              }}
+            >
+              <Settings size={18} strokeWidth={1.75} />
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 };
 
