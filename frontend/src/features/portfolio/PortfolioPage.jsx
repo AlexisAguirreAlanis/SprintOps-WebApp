@@ -10,6 +10,7 @@ import {
   Link2,
   List,
   Plus,
+  Search,
   Star,
   Users,
   MoreHorizontal,
@@ -269,7 +270,7 @@ const PortfolioPage = () => {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
         <div className="ps-tabs" role="tablist">
           {FILTERS.map((item) => (
             <button key={item.id} type="button" className={filter === item.id ? 'is-active' : ''} onClick={() => setFilter(item.id)}>
@@ -277,14 +278,20 @@ const PortfolioPage = () => {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            className="ps-quiet"
-            value={query}
-            placeholder="Buscar hojas"
-            aria-label="Buscar hojas"
-            onChange={(event) => setQuery(event.target.value)}
-          />
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <label className={`pf-sheet-search${query ? ' has-query' : ''}`}>
+            <Search size={16} />
+            <span className="pf-sheet-search-field">
+              <span>
+                <input
+                  value={query}
+                  placeholder="Buscar hojas"
+                  aria-label="Buscar hojas"
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </span>
+            </span>
+          </label>
           <div className="relative" ref={sortRef}>
             <button type="button" className={`ps-quiet ps-sort-toggle${sortOpen ? ' is-open' : ''}`} aria-expanded={sortOpen} onClick={() => setSortOpen((open) => !open)}>
               Ordenar: {SORTS.find((item) => item.id === sort)?.label}
@@ -299,8 +306,14 @@ const PortfolioPage = () => {
             </div>
           </div>
           <div className="ps-view-switch" role="group" aria-label="Vista de hojas">
-            <button type="button" className={view === 'grid' ? 'is-active' : ''} aria-pressed={view === 'grid'} onClick={() => setView('grid')} title="Cuadrícula"><LayoutGrid size={16} /></button>
-            <button type="button" className={view === 'list' ? 'is-active' : ''} aria-pressed={view === 'list'} onClick={() => setView('list')} title="Lista"><List size={16} /></button>
+            <button type="button" className={view === 'grid' ? 'is-active' : ''} aria-pressed={view === 'grid'} onClick={() => setView('grid')}>
+              <LayoutGrid size={16} />
+              <span className="ps-view-label"><span>Vista en tarjeta</span></span>
+            </button>
+            <button type="button" className={view === 'list' ? 'is-active' : ''} aria-pressed={view === 'list'} onClick={() => setView('list')}>
+              <List size={16} />
+              <span className="ps-view-label"><span>Vista en lista</span></span>
+            </button>
           </div>
         </div>
       </div>

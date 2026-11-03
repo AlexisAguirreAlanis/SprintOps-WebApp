@@ -471,6 +471,35 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
   }
 }
 
+.ps-scroll-arrow {
+  position: absolute;
+  z-index: 2;
+  left: calc(50% - 8px);
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  transform: translateX(-50%);
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-text) 14%, transparent);
+}
+
+.ps-scroll-arrow.is-up {
+  top: 8px;
+}
+
+.ps-scroll-arrow.is-down {
+  bottom: 12px;
+}
+
+.ps-scroll-arrow:hover,
+.ps-scroll-arrow:focus-visible {
+  background: color-mix(in srgb, var(--app-accent) 18%, var(--app-surface));
+}
+
 .ps-page {
   color: var(--app-text);
 }
@@ -1422,6 +1451,7 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
 
 .ps-view-switch {
   display: inline-flex;
+  flex-shrink: 0;
   padding: 4px;
   border-radius: 14px;
   border: 1px solid var(--app-border);

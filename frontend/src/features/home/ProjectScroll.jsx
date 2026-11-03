@@ -1,4 +1,5 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const EDGE_EPS = 2;
 
@@ -25,6 +26,7 @@ function fadeLength(distance, fadeMax) {
 const ProjectScroll = ({ children }) => {
   const viewportRef = useRef(null);
   const contentRef = useRef(null);
+  const [edges, setEdges] = useState({ up: false, down: false });
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -45,7 +47,17 @@ const ProjectScroll = ({ children }) => {
         '--fade-bottom',
         active ? fadeLength(maxScroll - viewport.scrollTop, fadeMax) : '0px',
       );
+      const next = { up: viewport.scrollTop > EDGE_EPS, down: active && maxScroll - viewport.scrollTop > EDGE_EPS };
+      setEdges((current) => (current.up === next.up && current.down === next.down ? current : next));
     };
+
+    const nudge = (direction) => {
+      viewport.scrollBy({
+        top: direction * Math.round(viewport.clientHeight * 0.72),
+        behavior: 'smooth',
+      });
+    };
+    viewportRef.current.nudge = nudge;
 
     const schedule = () => {
       if (frame) return;
@@ -69,8 +81,10 @@ const ProjectScroll = ({ children }) => {
     };
   }, []);
 
+  const nudge = (direction) => viewportRef.current?.nudge?.(direction);
+
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
+    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
       <div
         ref={viewportRef}
         className="scroll-edge-fade no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pr-4"
@@ -79,6 +93,16 @@ const ProjectScroll = ({ children }) => {
           {children}
         </div>
       </div>
+      {edges.up && (
+        <button type="button" className="ps-scroll-arrow is-up" aria-label="Proyectos anteriores" onClick={() => nudge(-1)}>
+          <ChevronUp size={16} />
+        </button>
+      )}
+      {edges.down && (
+        <button type="button" className="ps-scroll-arrow is-down" aria-label="Más proyectos" onClick={() => nudge(1)}>
+          <ChevronDown size={16} />
+        </button>
+      )}
     </div>
   );
 };
