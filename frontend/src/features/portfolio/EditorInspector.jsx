@@ -17,7 +17,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { defaultBend, isArrow } from './portfolioDocument';
-import { DASH_OPTIONS, endAngle, HEAD_OPTIONS, parallelCopies, ROUTE_OPTIONS, trimPolyline } from './connectorGeometry';
+import { arrowPath, DASH_OPTIONS, endAngle, HEAD_OPTIONS, parallelCopies, ROUTE_OPTIONS, trimPolyline } from './connectorGeometry';
 
 const TABS = [
   { id: 'design', label: 'Diseño' },
@@ -203,31 +203,18 @@ function WireGlyph({ count, wide }) {
 }
 
 function previewRoute(route) {
+  if (route === 'straight') return [30, 36, 190, 36];
   if (route === 'curve') {
     const points = [];
-    for (let step = 0; step <= 24; step += 1) {
-      const t = step / 24;
-      const u = 1 - t;
-      points.push(u * u * 30 + 2 * u * t * 110 + t * t * 190, u * u * 54 + 2 * u * t * 12 + t * t * 54);
+    const steps = 32;
+    for (let step = 0; step <= steps; step += 1) {
+      const t = step / steps;
+      const lift = 0.5 - 0.5 * Math.cos(Math.PI * 2 * t);
+      points.push(36 + t * 148, 50 - lift * 26);
     }
     return points;
   }
-  if (route === 'elbow') return [30, 54, 110, 54, 110, 20, 190, 20];
-  if (route === 'round') {
-    const points = [30, 54];
-    const radius = 18;
-    for (let step = 0; step <= 8; step += 1) {
-      const t = (step / 8) * (Math.PI / 2);
-      points.push(92 + radius * Math.sin(t), 54 - radius * (1 - Math.cos(t)));
-    }
-    for (let step = 0; step <= 8; step += 1) {
-      const t = (step / 8) * (Math.PI / 2);
-      points.push(110 + radius * (1 - Math.cos(t)), 36 - radius * Math.sin(t));
-    }
-    points.push(190, 18);
-    return points;
-  }
-  return [30, 36, 190, 36];
+  return arrowPath({ points: [30, 54, 190, 18], route, corner: 16 }).points;
 }
 
 function ConnectorPreview({ route, start, end, dash, color, wires }) {
@@ -634,7 +621,6 @@ const EditorInspector = ({
                 </div>
               </section>
             )}
-            {isArrow(primary) && <ConnectorPanel primary={primary} onUpdate={onUpdate} />}
             {textCapable(primary) && (
               <section className="pf-block">
                 <h2>Tipografía</h2>

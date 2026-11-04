@@ -52,16 +52,16 @@ import {
   bendFromPoint,
   connectionTargets,
   defaultBend,
-  endAngle,
   headKind,
   headTrim,
-  insertVertex,
+  insertWaypoint,
   lineCount,
   localPoint,
   parallelCopies,
   pointAlong,
   removeVertex,
   strokeDash,
+  tipAngle,
   trimPolyline,
 } from './connectorGeometry';
 import { readImageFile } from './editorMedia';
@@ -330,6 +330,52 @@ function ArrowTip({ x, y, scale, accent, label, onBegin, onDrag, onEnd, onRemove
   );
 }
 
+function TipOrbit({ x, y, angle, scale, accent, onBegin, onDrag, onEnd }) {
+  const unit = 1 / (scale || 1);
+  const orbit = 28 * unit;
+  const knob = Math.max(4.2, 5.5 * unit);
+  const place = (node, next) => {
+    node.position({ x: x + Math.cos(next) * orbit, y: y + Math.sin(next) * orbit });
+    return next;
+  };
+  return (
+    <>
+      <Circle
+        x={x}
+        y={y}
+        radius={orbit}
+        stroke={accent}
+        strokeWidth={1.15 * unit}
+        dash={[2.2 * unit, 3.2 * unit]}
+        listening={false}
+      />
+      <Circle
+        x={x + Math.cos(angle) * orbit}
+        y={y + Math.sin(angle) * orbit}
+        radius={knob}
+        fill={accent}
+        stroke="#ffffff"
+        strokeWidth={Math.max(1.2, 1.8 * unit)}
+        draggable
+        name="Giro"
+        onMouseDown={(event) => { event.cancelBubble = true; }}
+        onDblClick={(event) => { event.cancelBubble = true; }}
+        onDragStart={(event) => { event.cancelBubble = true; onBegin(); }}
+        onDragMove={(event) => {
+          event.cancelBubble = true;
+          const node = event.target;
+          onDrag(place(node, Math.atan2(node.y() - y, node.x() - x)));
+        }}
+        onDragEnd={(event) => {
+          event.cancelBubble = true;
+          const node = event.target;
+          onEnd(place(node, Math.atan2(node.y() - y, node.x() - x)));
+        }}
+      />
+    </>
+  );
+}
+
 function ConnectorHead({ kind, size, color, x, y, angle, width }) {
   if (!kind || kind === 'none') return null;
   const stroke = Math.max(1.5, width || 2);
@@ -365,6 +411,8 @@ function ArrowShape({ element, accent, selected, scale, onBegin, onLive, onEnd, 
   const cap = element.cap || (element.dash === 'dotted' ? 'round' : 'round');
   const join = element.join || 'round';
   const labelAt = element.label ? pointAlong(path.points, element.labelT ?? 0.5) : null;
+  const startAngle = tipAngle(element, path.points, path.tension, false);
+  const endHeadAngle = tipAngle(element, path.points, path.tension, true);
   const moveTip = (index, x, y) => {
     const points = raw.slice();
     points[index] = x;
@@ -396,8 +444,8 @@ function ArrowShape({ element, accent, selected, scale, onBegin, onLive, onEnd, 
           dashEnabled={Boolean(dash)}
         />
       ))}
-      <ConnectorHead kind={startKind} size={head} color={element.headFill || stroke} x={raw[0]} y={raw[1]} angle={endAngle(path.points, false)} width={width} />
-      <ConnectorHead kind={endKind} size={head} color={element.headFill || stroke} x={raw[raw.length - 2]} y={raw[raw.length - 1]} angle={endAngle(path.points, true)} width={width} />
+      <ConnectorHead kind={startKind} size={head} color={element.headFill || stroke} x={raw[0]} y={raw[1]} angle={startAngle} width={width} />
+      <ConnectorHead kind={endKind} size={head} color={element.headFill || stroke} x={raw[raw.length - 2]} y={raw[raw.length - 1]} angle={endHeadAngle} width={width} />
       {labelAt && (
         <Text
           x={labelAt.x - 48}
@@ -427,11 +475,35 @@ function ArrowShape({ element, accent, selected, scale, onBegin, onLive, onEnd, 
           onEnd={(x, y) => settleTip(index, x, y)}
           onRemove={index > 0 && index < raw.length - 2 ? () => {
             onBegin();
-            onLive(element.id, { points: removeVertex(raw, index / 2), route: 'poly' });
+            onLive(element.id, { points: removeVertex(raw, index / 2) });
             onEnd();
           } : undefined}
         />
       ))}
+      {selected && (
+        <>
+          <TipOrbit
+            x={raw[0]}
+            y={raw[1]}
+            angle={startAngle}
+            scale={scale}
+            accent={accent}
+            onBegin={onBegin}
+            onDrag={(headAngleStart) => onLive(element.id, { headAngleStart })}
+            onEnd={() => onEnd()}
+          />
+          <TipOrbit
+            x={raw[raw.length - 2]}
+            y={raw[raw.length - 1]}
+            angle={endHeadAngle}
+            scale={scale}
+            accent={accent}
+            onBegin={onBegin}
+            onDrag={(headAngle) => onLive(element.id, { headAngle })}
+            onEnd={() => onEnd()}
+          />
+        </>
+      )}
       {selected && route === 'curve' && raw.length === 4 && path.control && (
         <ArrowTip
           x={path.control.x}
@@ -768,7 +840,7 @@ const PortfolioEditorPage = () => {
         const sheet = await portfolioRepository.get(hojaId, user.id);
         if (cancel) return;
         const document = parseDocument(sheet.document);
-        dispatch({ type: 'load', elements: document.elements });
+        dispatch({ type: 'load', elements: syncConnectors(document.elements) });
         if (document.viewport) setCamera(document.viewport);
         revisionRef.current = sheet.revision;
         setMeta(sheet);
@@ -808,7 +880,7 @@ const PortfolioEditorPage = () => {
             const fresh = await portfolioRepository.get(hojaId, user.id);
             const document = parseDocument(fresh.document);
             revisionRef.current = fresh.revision;
-            dispatch({ type: 'load', elements: document.elements });
+            dispatch({ type: 'load', elements: syncConnectors(document.elements) });
             setStatus('saved');
             setError('Se recuperó la versión guardada en el servidor.');
           } catch (reloadError) {
@@ -1618,7 +1690,7 @@ const PortfolioEditorPage = () => {
                   if (element && isArrow(element) && world) {
                     const local = localPoint(element, world.x, world.y);
                     commit(elementsRef.current.map((item) => (item.id === element.id
-                      ? { ...item, points: insertVertex(item.points, local.x, local.y), route: 'poly' }
+                      ? { ...item, points: insertWaypoint(item, local.x, local.y) }
                       : item)));
                     setSelection([element.id]);
                     return;

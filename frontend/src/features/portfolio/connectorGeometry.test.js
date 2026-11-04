@@ -5,8 +5,10 @@ import {
   arrowPath,
   attachEnds,
   connectionTargets,
+  expandTension,
   headKind,
   insertVertex,
+  insertWaypoint,
   pointAlong,
   removeVertex,
   syncConnectors,
@@ -43,6 +45,64 @@ test('recortar el trazo no mueve el extremo más que el tamaño de la cabeza', (
   const trimmed = trimPolyline([0, 0, 100, 0], 0, 18);
   assert.ok(trimmed[2] < 100);
   assert.ok(trimmed[2] > 80);
+});
+
+test('el codo redondo sale en horizontal y no cae en una escalera viva', () => {
+  const round = arrowPath({ points: [0, 80, 200, 20], route: 'round', corner: 28 });
+  assert.equal(round.points[1], round.points[3]);
+  const last = round.points.length;
+  assert.ok(Math.abs(round.points[last - 1] - round.points[last - 3]) < 0.2);
+  const sharp = [0, 80, 100, 80, 100, 20, 200, 20];
+  assert.notDeepEqual(round.points, sharp);
+  let bulge = 0;
+  for (let index = 0; index < round.points.length; index += 2) {
+    const x = round.points[index];
+    const y = round.points[index + 1];
+    const corner = Math.hypot(x - 100, y - 80);
+    if (x > 70 && x < 110 && y < 80 && y > 50) bulge = Math.max(bulge, 28 - corner);
+  }
+  assert.ok(bulge > 6);
+});
+
+test('un desnivel corto no vuelve a la escalera recta', () => {
+  const tight = arrowPath({ points: [0, 0, 200, 8], route: 'round', corner: 28 });
+  assert.notDeepEqual(tight.points, [0, 0, 100, 0, 100, 8, 200, 8]);
+});
+
+test('un punto extra conserva la curva, el codo y la redonda', () => {
+  const curve = arrowPath({ points: [0, 0, 40, 30, 80, 0], route: 'curve' });
+  assert.ok(curve.tension > 0);
+  assert.deepEqual(curve.points, [0, 0, 40, 30, 80, 0]);
+  const elbow = arrowPath({ points: [0, 0, 40, 20, 80, 0], route: 'elbow' });
+  assert.ok(elbow.points.length > 6);
+  const round = arrowPath({ points: [0, 0, 50, 40, 120, 0], route: 'round', corner: 18 });
+  assert.ok(round.points.length > elbow.points.length);
+});
+
+test('la curva se dibuja combada y una conexión no la parte', () => {
+  const curve = arrowPath({ points: [0, 0, 160, 0], route: 'curve', bend: 48 });
+  const stroke = expandTension(curve.points, curve.tension);
+  let peak = 0;
+  for (let index = 0; index < stroke.length; index += 2) peak = Math.max(peak, Math.abs(stroke[index + 1]));
+  assert.ok(peak > 20);
+  assert.ok(stroke.length > curve.points.length);
+  const linked = arrowPath({
+    points: [0, 0, 160, 0],
+    route: 'curve',
+    bend: 48,
+    approach: 77,
+    to: { anchor: 'left', nx: -1, ny: 0 },
+  });
+  assert.equal(linked.tension, curve.tension);
+  assert.deepEqual(linked.points, curve.points);
+});
+
+test('doble clic sobre una curva inserta el punto sin cambiar el recorrido', () => {
+  const element = { points: [0, 0, 120, 0], route: 'curve', bend: 40 };
+  const next = insertWaypoint(element, 60, 30);
+  assert.equal(next.length, 6);
+  const again = arrowPath({ ...element, points: next });
+  assert.ok(again.tension > 0);
 });
 
 test('doble clic inserta un vértice y otro doble clic en el medio lo quita', () => {
@@ -96,6 +156,20 @@ test('mover una punta muestra el ancla del tipo de elemento cercano', () => {
   assert.equal(connectionTargets([note], 0, 0, 'arrow').hosts.length, 0);
   const line = { id: 'line', type: 'line', x: 0, y: 0, width: 10, height: 10, points: [0, 0, 10, 0] };
   assert.equal(connectionTargets([line], 2, 0, 'arrow').hosts.length, 0);
+});
+
+test('girar la punta dobla el trazo hasta llegar en esa dirección', () => {
+  const aimed = arrowPath({ points: [0, 0, 180, 0], route: 'straight', headAngle: -Math.PI / 2 });
+  const count = aimed.points.length;
+  assert.ok(count > 6);
+  assert.equal(aimed.tension, 0);
+  assert.ok(Math.abs(aimed.points[count - 2] - 180) < 0.2);
+  assert.ok(Math.abs(aimed.points[count - 1]) < 0.2);
+  const dx = aimed.points[count - 2] - aimed.points[count - 4];
+  const dy = aimed.points[count - 1] - aimed.points[count - 3];
+  assert.ok(Math.abs(Math.atan2(dy, dx) + Math.PI / 2) < 0.2);
+  const plain = arrowPath({ points: [0, 0, 180, 0], route: 'straight' });
+  assert.deepEqual(plain.points, [0, 0, 180, 0]);
 });
 
 test('soltar una flecha sobre una figura guarda la relación por id', () => {
