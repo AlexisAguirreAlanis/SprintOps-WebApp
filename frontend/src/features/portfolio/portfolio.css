@@ -778,6 +778,14 @@
   border-radius: 12px;
   background: var(--app-bg);
   padding: 4px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.pf-font-list.is-open {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .pf-font-list button {
@@ -851,6 +859,386 @@
   font-weight: 800;
 }
 
+.pf-connector {
+  gap: 12px;
+}
+
+.pf-connector h2 {
+  color: var(--app-text);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pf-connector-preview {
+  display: grid;
+  height: 92px;
+  place-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--app-bg) 78%, var(--app-surface));
+}
+
+.pf-connector-preview svg {
+  width: min(100%, 248px);
+  height: 68px;
+}
+
+.pf-connector-label {
+  margin: 4px 0 0;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pf-route-icons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pf-route-icons button {
+  display: grid;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  color: var(--app-text);
+}
+
+.pf-route-icons button svg {
+  width: 34px;
+  height: 26px;
+}
+
+.pf-route-icons button.is-active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--app-accent) 28%, var(--app-surface));
+}
+
+.pf-appear-caps,
+.pf-appear {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1.05fr) 72px;
+  gap: 8px;
+  align-items: center;
+}
+
+.pf-appear-caps span {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pf-mini {
+  position: relative;
+  min-width: 0;
+}
+
+.pf-mini-btn,
+.pf-cap,
+.pf-swap {
+  display: flex;
+  width: 100%;
+  height: 40px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pf-mini-btn svg,
+.pf-dash-icon {
+  width: 36px;
+  height: 16px;
+  color: var(--app-text);
+}
+
+.pf-end .pf-mini-btn svg.pf-end-sample {
+  width: auto;
+  height: 20px;
+  flex: 1 1 auto;
+}
+
+.pf-mini-pop .pf-end-sample {
+  width: 78px;
+  height: 20px;
+}
+
+.pf-width input {
+  width: 100%;
+  height: 40px;
+  min-width: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pf-wire-icon {
+  width: 18px;
+  height: 16px;
+}
+
+.pf-swatch {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+}
+
+.pf-mini-pop {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  max-width: 230px;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  padding: 6px;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--app-text) 12%, transparent);
+  transform-origin: top left;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.pf-mini-pop.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-mini-pop,
+  .pf-font-list,
+  .pf-mini-btn svg {
+    transition: none;
+  }
+}
+
+.pf-mini.is-open .pf-mini-btn svg:last-child {
+  transform: rotate(180deg);
+}
+
+.pf-mini-btn svg {
+  transition: transform 160ms ease;
+}
+
+.pf-mini-float {
+  position: fixed;
+  z-index: 40;
+  right: auto;
+  bottom: auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 260px;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin !important;
+  scrollbar-color: color-mix(in srgb, var(--app-text) 38%, transparent) transparent;
+}
+
+.pf-mini-float::-webkit-scrollbar {
+  display: block !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+
+.pf-mini-float::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--app-text) 38%, transparent);
+  background-clip: padding-box;
+}
+
+.pf-mini-float.is-up {
+  transform-origin: bottom left;
+}
+
+.pf-mini-float.is-up:not(.is-open) {
+  transform: translateY(6px) scale(0.98);
+}
+
+.pf-mini-pop button {
+  display: flex;
+  flex: 0 0 auto;
+  height: 34px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 0 8px;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+}
+
+.pf-mini-pop button svg {
+  width: 36px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.pf-mini-pop button.is-active,
+.pf-mini-pop button:hover {
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
+}
+
+.pf-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 196px;
+}
+
+.pf-mini-pop .pf-swatch-row button {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  justify-content: center;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  padding: 0;
+}
+
+.pf-cap {
+  justify-content: center;
+  padding: 0;
+}
+
+.pf-cap svg {
+  width: 18px;
+  height: 16px;
+  stroke: var(--app-text);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.pf-cap.is-butt svg {
+  stroke-linecap: butt;
+}
+
+.pf-ends {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.pf-end {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pf-swap {
+  justify-content: center;
+  padding: 0;
+  color: var(--app-muted);
+}
+
+.pf-label-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pf-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text) 16%, var(--app-border));
+}
+
+.pf-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--app-surface);
+  transition: transform 160ms ease;
+}
+
+.pf-switch.is-on {
+  background: var(--app-accent);
+}
+
+.pf-switch.is-on i {
+  transform: translateX(16px);
+}
+
+.pf-label-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pf-label-tools .pf-mini {
+  width: 72px;
+}
+
+.pf-label-size {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pf-advanced {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--app-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pf-advanced svg {
+  transition: transform 160ms ease;
+}
+
+.pf-advanced.is-open svg {
+  transform: rotate(180deg);
+}
+
+.pf-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .pf-inspector input[type='number'] {
   appearance: textfield;
 }
@@ -919,12 +1307,14 @@
   position: absolute;
   z-index: 4;
   margin: 0;
+  overflow: hidden;
   resize: none;
-  border: 1px solid var(--app-accent);
-  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
-  color: var(--app-text);
-  padding: 0;
-  line-height: 1.2;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  caret-color: currentColor;
+  white-space: pre-wrap;
 }
 
 .pf-mobile-inspector {

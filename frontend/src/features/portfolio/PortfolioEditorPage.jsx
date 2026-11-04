@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Arrow, Ellipse, Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
+import { Ellipse, Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
 import {
   ChevronLeft,
   File,
@@ -33,20 +33,37 @@ import { portfolioRepository } from '../../data/repositories/portfolioRepository
 import { useDismiss } from '../home/useDismiss';
 import {
   alignElements,
-  arrowPath,
-  bendFromPoint,
   cloneElement,
+  cornerRadius,
   createElement,
   createId,
-  defaultBend,
   elementBounds,
   intersects,
   isArrow,
   parseDocument,
   sceneBounds,
   serializeDocument,
+  syncConnectors,
   textColor,
 } from './portfolioDocument';
+import {
+  arrowPath,
+  attachEnds,
+  bendFromPoint,
+  connectionTargets,
+  defaultBend,
+  endAngle,
+  headKind,
+  headTrim,
+  insertVertex,
+  lineCount,
+  localPoint,
+  parallelCopies,
+  pointAlong,
+  removeVertex,
+  strokeDash,
+  trimPolyline,
+} from './connectorGeometry';
 import { readImageFile } from './editorMedia';
 import EditorLibrary from './EditorLibrary';
 import EditorInspector from './EditorInspector';
@@ -134,6 +151,39 @@ function editorReducer(state, action) {
   return state;
 }
 
+function textEditorStyle(element, camera) {
+  const scale = camera.scale || 1;
+  const fontSize = (element.fontSize || 16) * scale;
+  const pad = (element.type === 'text' ? 0 : 12) * scale;
+  const width = Math.max(24, (element.width || 80) * scale);
+  const height = Math.max(fontSize + pad * 2, (element.height || 32) * scale);
+  const lines = Math.max(1, String(element.text || ' ').split('\n').length);
+  const lineHeight = fontSize * 1.2;
+  const inner = Math.max(lineHeight, height - pad * 2);
+  const offset = Math.max(0, (inner - lines * lineHeight) / 2);
+  return {
+    left: camera.x + element.x * scale,
+    top: camera.y + element.y * scale,
+    width,
+    height,
+    fontSize,
+    fontFamily: element.fontFamily,
+    fontWeight: Number(element.fontWeight) >= 700 ? 700 : (element.fontWeight || 500),
+    fontStyle: element.fontStyle === 'italic' ? 'italic' : 'normal',
+    color: textColor(element),
+    textAlign: element.align || 'center',
+    lineHeight: 1.2,
+    paddingTop: pad + offset,
+    paddingRight: pad,
+    paddingBottom: 0,
+    paddingLeft: pad,
+    textDecoration: element.textDecoration || 'none',
+    letterSpacing: `${(element.letterSpacing || 0) * scale}px`,
+    transform: `rotate(${element.rotation || 0}deg)`,
+    transformOrigin: 'top left',
+  };
+}
+
 function fontStyle(element) {
   const italic = element.fontStyle === 'italic';
   const bold = Number(element.fontWeight) >= 700;
@@ -156,7 +206,110 @@ const RemoteImage = memo(function RemoteImage({ src, width, height, cornerRadius
   return <KonvaImage image={image} width={width} height={height} cornerRadius={cornerRadius || 0} listening={false} />;
 });
 
-function ArrowTip({ x, y, scale, accent, label, onBegin, onDrag, onEnd }) {
+function HostMark({ host, hot, unit, accent }) {
+  const strokeWidth = (hot ? 2 : 1.25) * unit;
+  const dash = hot ? undefined : [5 * unit, 4 * unit];
+  const stroke = { stroke: accent, strokeWidth, dash, dashEnabled: Boolean(dash), listening: false };
+  const width = host.width;
+  const height = host.height;
+  if (host.kind === 'ellipse') {
+    return (
+      <>
+        {hot && <Ellipse x={width / 2} y={height / 2} radiusX={width / 2} radiusY={height / 2} fill={accent} opacity={0.12} listening={false} />}
+        <Ellipse x={width / 2} y={height / 2} radiusX={width / 2} radiusY={height / 2} {...stroke} />
+      </>
+    );
+  }
+  if (host.kind === 'media') {
+    const arm = Math.max(8, Math.min(18, width * 0.16, height * 0.16));
+    return (
+      <>
+        {hot && <Rect width={width} height={height} fill={accent} opacity={0.1} listening={false} />}
+        <Line points={[0, arm, 0, 0, arm, 0]} {...stroke} dash={undefined} dashEnabled={false} />
+        <Line points={[width - arm, 0, width, 0, width, arm]} {...stroke} dash={undefined} dashEnabled={false} />
+        <Line points={[0, height - arm, 0, height, arm, height]} {...stroke} dash={undefined} dashEnabled={false} />
+        <Line points={[width - arm, height, width, height, width, height - arm]} {...stroke} dash={undefined} dashEnabled={false} />
+      </>
+    );
+  }
+  const radius = host.kind === 'text' ? 4 : host.radius;
+  const textDash = host.kind === 'text' ? [4 * unit, 3 * unit] : stroke.dash;
+  return (
+    <>
+      {hot && <Rect width={width} height={height} cornerRadius={radius || 0} fill={accent} opacity={0.1} listening={false} />}
+      <Rect width={width} height={height} cornerRadius={radius || 0} {...stroke} dash={textDash} dashEnabled={Boolean(textDash)} />
+      {host.kind === 'frame' && width > 36 && height > 36 && (
+        <Rect
+          x={10}
+          y={10}
+          width={width - 20}
+          height={height - 20}
+          cornerRadius={Math.max(0, (typeof radius === 'number' ? radius : 16) - 8)}
+          {...stroke}
+        />
+      )}
+      {host.kind === 'note' && (
+        <Line
+          points={[width - Math.min(18, width * 0.2), 0, width, Math.min(18, height * 0.2)]}
+          {...stroke}
+          dash={undefined}
+          dashEnabled={false}
+        />
+      )}
+      {host.kind === 'table' && width > 24 && height > 24 && (
+        <>
+          <Line points={[0, height / 3, width, height / 3]} {...stroke} dash={undefined} dashEnabled={false} />
+          <Line points={[0, (height * 2) / 3, width, (height * 2) / 3]} {...stroke} dash={undefined} dashEnabled={false} />
+          <Line points={[width / 2, 0, width / 2, height]} {...stroke} dash={undefined} dashEnabled={false} />
+        </>
+      )}
+    </>
+  );
+}
+
+function ConnectionGuides({ x, y, elements, scale, accent, ignoreId }) {
+  const { hosts, active } = connectionTargets(elements, x, y, ignoreId);
+  const unit = 1 / (scale || 1);
+  return (
+    <Group listening={false}>
+      {hosts.map((host) => (
+        <Group key={host.id} x={host.x} y={host.y} rotation={host.rotation} opacity={active?.id === host.id ? 1 : 0.78} listening={false}>
+          <HostMark host={host} hot={active?.id === host.id} unit={unit} accent={accent} />
+        </Group>
+      ))}
+      {hosts.flatMap((host) => host.anchors.map((anchor) => {
+        const on = active?.id === host.id && active.anchor === anchor.anchor;
+        const center = anchor.anchor === 'center';
+        return (
+          <Circle
+            key={`${host.id}-${anchor.anchor}`}
+            x={anchor.x}
+            y={anchor.y}
+            radius={(on ? 6.5 : center ? 3 : 4.2) * unit}
+            fill={on ? accent : '#ffffff'}
+            stroke={accent}
+            strokeWidth={(on ? 2 : 1.35) * unit}
+            listening={false}
+          />
+        );
+      }))}
+      {active && (
+        <>
+          <Line
+            points={[x, y, active.x, active.y]}
+            stroke={accent}
+            strokeWidth={1.6 * unit}
+            dash={[5 * unit, 4 * unit]}
+            listening={false}
+          />
+          <Circle x={active.x} y={active.y} radius={11 * unit} stroke={accent} strokeWidth={1.25 * unit} listening={false} />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function ArrowTip({ x, y, scale, accent, label, onBegin, onDrag, onEnd, onRemove }) {
   const radius = Math.max(4.5, 7 / (scale || 1));
   return (
     <Circle
@@ -168,73 +321,140 @@ function ArrowTip({ x, y, scale, accent, label, onBegin, onDrag, onEnd }) {
       strokeWidth={Math.max(1.25, 2 / (scale || 1))}
       draggable
       onMouseDown={(event) => { event.cancelBubble = true; }}
+      onDblClick={(event) => { event.cancelBubble = true; onRemove?.(); }}
       onDragStart={(event) => { event.cancelBubble = true; onBegin(); }}
       onDragMove={(event) => { event.cancelBubble = true; onDrag(event.target.x(), event.target.y()); }}
-      onDragEnd={(event) => { event.cancelBubble = true; onEnd(); }}
+      onDragEnd={(event) => { event.cancelBubble = true; onEnd(event.target.x(), event.target.y()); }}
       name={label}
     />
   );
 }
 
-function ArrowShape({ element, accent, selected, scale, onBegin, onLive, onEnd }) {
+function ConnectorHead({ kind, size, color, x, y, angle, width }) {
+  if (!kind || kind === 'none') return null;
+  const stroke = Math.max(1.5, width || 2);
+  return (
+    <Group x={x} y={y} rotation={(angle * 180) / Math.PI} listening={false}>
+      {kind === 'triangle' && <Line points={[0, 0, -size, size * 0.42, -size, -size * 0.42]} closed fill={color} />}
+      {kind === 'open' && <Line points={[-size, size * 0.42, 0, 0, -size, -size * 0.42]} stroke={color} strokeWidth={stroke} lineCap="round" lineJoin="round" />}
+      {kind === 'ring' && <Circle x={-size * 0.42} radius={size * 0.3} stroke={color} strokeWidth={stroke} />}
+      {kind === 'disc' && <Circle x={-size * 0.42} radius={size * 0.3} fill={color} />}
+      {kind === 'diamond' && <Line points={[-size, 0, -size * 0.5, size * 0.36, 0, 0, -size * 0.5, -size * 0.36]} closed stroke={color} strokeWidth={stroke} />}
+      {kind === 'gem' && <Line points={[-size, 0, -size * 0.5, size * 0.36, 0, 0, -size * 0.5, -size * 0.36]} closed fill={color} />}
+      {kind === 'square' && <Rect x={-size} y={-size * 0.28} width={size * 0.56} height={size * 0.56} stroke={color} strokeWidth={stroke} />}
+      {kind === 'box' && <Rect x={-size} y={-size * 0.28} width={size * 0.56} height={size * 0.56} fill={color} />}
+      {kind === 'bar' && <Line points={[0, -size * 0.42, 0, size * 0.42]} stroke={color} strokeWidth={stroke * 1.3} lineCap="butt" />}
+      {kind === 'crow' && <Line points={[-size, size * 0.38, 0, 0, -size, 0, 0, 0, -size, -size * 0.38]} stroke={color} strokeWidth={stroke} lineCap="round" lineJoin="round" />}
+    </Group>
+  );
+}
+
+function ArrowShape({ element, accent, selected, scale, onBegin, onLive, onEnd, onGuide }) {
   const raw = element.points;
   const route = element.route || 'straight';
   const path = arrowPath(element);
   const stroke = element.stroke && element.stroke !== 'transparent' ? element.stroke : accent;
   const width = element.strokeWidth || 3;
-  const span = Math.hypot(raw[2] - raw[0], raw[3] - raw[1]);
-  const head = Math.max(14, Math.min(34, span * 0.32));
+  const span = Math.hypot((raw[raw.length - 2] || 0) - raw[0], (raw[raw.length - 1] || 0) - raw[1]);
+  const head = element.headSize || Math.max(14, Math.min(32, span * 0.28));
+  const startKind = headKind(element, false);
+  const endKind = headKind(element, true);
+  const drawn = trimPolyline(path.points, headTrim(startKind, head), headTrim(endKind, head));
+  const wires = parallelCopies(drawn, lineCount(element), width + Math.max(4, width * 0.65));
+  const dash = strokeDash(element.dash, width);
+  const cap = element.cap || (element.dash === 'dotted' ? 'round' : 'round');
+  const join = element.join || 'round';
+  const labelAt = element.label ? pointAlong(path.points, element.labelT ?? 0.5) : null;
   const moveTip = (index, x, y) => {
     const points = raw.slice();
     points[index] = x;
     points[index + 1] = y;
     const partial = { points };
-    if ((element.route || 'straight') === 'curve') partial.bend = Number.isFinite(element.bend) ? element.bend : defaultBend(points);
+    if (index === 0) partial.from = null;
+    if (index === points.length - 2) partial.to = null;
+    if ((element.route || 'straight') === 'curve' && points.length === 4) {
+      partial.bend = Number.isFinite(element.bend) ? element.bend : defaultBend(points);
+    }
     onLive(element.id, partial);
   };
+  const settleTip = (index, x, y) => onEnd(index, x, y);
+  const vertices = [];
+  for (let index = 0; index < raw.length; index += 2) vertices.push(index);
   return (
     <>
-      <Arrow
-        points={path.points}
-        tension={path.tension}
-        stroke={stroke}
-        fill={stroke}
-        strokeWidth={width}
-        pointerLength={head}
-        pointerWidth={head * 0.78}
-        hitStrokeWidth={Math.max(16, width + 12)}
-        lineCap="round"
-        lineJoin="round"
-      />
-      {selected && (
-        <>
-          <ArrowTip x={raw[0]} y={raw[1]} scale={scale} accent={accent} label="Inicio" onBegin={onBegin} onEnd={onEnd} onDrag={(x, y) => moveTip(0, x, y)} />
-          <ArrowTip x={raw[2]} y={raw[3]} scale={scale} accent={accent} label="Punta" onBegin={onBegin} onEnd={onEnd} onDrag={(x, y) => moveTip(2, x, y)} />
-          {route === 'curve' && path.control && (
-            <ArrowTip
-              x={path.control.x}
-              y={path.control.y}
-              scale={scale}
-              accent={accent}
-              label="Curva"
-              onBegin={onBegin}
-              onEnd={onEnd}
-              onDrag={(x, y) => onLive(element.id, { bend: bendFromPoint(raw, x, y), route: 'curve' })}
-            />
-          )}
-        </>
+      {wires.map((points, index) => (
+        <Line
+          key={index}
+          points={points}
+          tension={path.tension}
+          stroke={stroke}
+          strokeWidth={width}
+          hitStrokeWidth={Math.max(16, width + 12)}
+          lineCap={cap}
+          lineJoin={join}
+          dash={dash || undefined}
+          dashEnabled={Boolean(dash)}
+        />
+      ))}
+      <ConnectorHead kind={startKind} size={head} color={element.headFill || stroke} x={raw[0]} y={raw[1]} angle={endAngle(path.points, false)} width={width} />
+      <ConnectorHead kind={endKind} size={head} color={element.headFill || stroke} x={raw[raw.length - 2]} y={raw[raw.length - 1]} angle={endAngle(path.points, true)} width={width} />
+      {labelAt && (
+        <Text
+          x={labelAt.x - 48}
+          y={labelAt.y - 18}
+          width={96}
+          align="center"
+          text={element.label}
+          fontSize={element.fontSize || 13}
+          fontFamily={element.fontFamily}
+          fill={element.textFill || stroke}
+          listening={false}
+        />
+      )}
+      {selected && vertices.map((index) => (
+        <ArrowTip
+          key={index}
+          x={raw[index]}
+          y={raw[index + 1]}
+          scale={scale}
+          accent={accent}
+          label={index === 0 ? 'Inicio' : index === raw.length - 2 ? 'Punta' : 'Punto'}
+          onBegin={() => {
+            onBegin();
+            if (index === 0 || index === raw.length - 2) onGuide?.(index === 0 ? 'from' : 'to');
+          }}
+          onDrag={(x, y) => moveTip(index, x, y)}
+          onEnd={(x, y) => settleTip(index, x, y)}
+          onRemove={index > 0 && index < raw.length - 2 ? () => {
+            onBegin();
+            onLive(element.id, { points: removeVertex(raw, index / 2), route: 'poly' });
+            onEnd();
+          } : undefined}
+        />
+      ))}
+      {selected && route === 'curve' && raw.length === 4 && path.control && (
+        <ArrowTip
+          x={path.control.x}
+          y={path.control.y}
+          scale={scale}
+          accent={accent}
+          label="Curva"
+          onBegin={onBegin}
+          onDrag={(x, y) => onLive(element.id, { bend: bendFromPoint(raw, x, y), route: 'curve' })}
+          onEnd={() => onEnd()}
+        />
       )}
     </>
   );
 }
 
-const SceneNode = memo(function SceneNode({ element, tool, editing, selected, scale, accent, onSelect, onBegin, onLive, onEnd, setNode }) {
+const SceneNode = memo(function SceneNode({ element, tool, editing, selected, scale, accent, onSelect, onBegin, onLive, onEnd, onGuide, onDuplicate, setNode }) {
   const common = {
     id: element.id,
     x: element.x,
     y: element.y,
     rotation: element.rotation || 0,
-    opacity: editing ? 0 : element.opacity ?? 1,
+    opacity: element.opacity ?? 1,
     draggable: tool === 'select' && !element.locked,
     listening: tool === 'select',
     onMouseDown: (event) => {
@@ -244,6 +464,7 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, selected, sc
     },
     onDragStart: (event) => {
       if (event.target !== event.currentTarget) return;
+      if (event.evt?.altKey) onDuplicate?.(element.id);
       onBegin();
     },
     onDragMove: (event) => {
@@ -299,6 +520,7 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, selected, sc
           onBegin={onBegin}
           onLive={onLive}
           onEnd={onEnd}
+          onGuide={onGuide}
         />
       ) : element.type === 'line' && element.brush === 'spray' ? (
         <SprayShape element={element} />
@@ -327,7 +549,7 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, selected, sc
         <Rect
           width={element.width}
           height={element.height}
-          cornerRadius={element.radius || (element.type === 'sticky' ? 8 : 0)}
+          cornerRadius={cornerRadius(element) || (element.type === 'sticky' ? 8 : 0)}
           fill={element.type === 'text' ? 'transparent' : element.fill}
           stroke={element.type === 'frame' ? (element.stroke || accent) : element.stroke}
           strokeWidth={element.type === 'frame' ? (element.strokeWidth || 2) : (element.strokeWidth || 0)}
@@ -348,6 +570,9 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, selected, sc
           fontStyle={fontStyle(element)}
           fontFamily={element.fontFamily}
           fill={textColor(element)}
+          textDecoration={element.textDecoration || ''}
+          letterSpacing={element.letterSpacing || 0}
+          opacity={editing ? 0 : 1}
           listening={false}
         />
       )}
@@ -445,6 +670,7 @@ const PortfolioEditorPage = () => {
   const [arrowRoute, setArrowRoute] = useState('straight');
   const [shapesOpen, setShapesOpen] = useState(false);
   const [selection, setSelection] = useState([]);
+  const [tipDrag, setTipDrag] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [marquee, setMarquee] = useState(null);
   const [size, setSize] = useState({ width: 800, height: 600 });
@@ -465,10 +691,12 @@ const PortfolioEditorPage = () => {
   const [shareEmail, setShareEmail] = useState('');
   const [memberQuery, setMemberQuery] = useState('');
   const [shareNote, setShareNote] = useState('');
-  const [presenting, setPresenting] = useState(false);
+  const [presentMode, setPresentMode] = useState('editor');
+  const presenting = presentMode === 'entering' || presentMode === 'presenting';
   const [frameIndex, setFrameIndex] = useState(0);
   const [player, setPlayer] = useState(null);
   const [full, setFull] = useState(false);
+  const [modifiers, setModifiers] = useState({ shift: false, alt: false });
   const [accent, setAccent] = useState('#67BFA1');
   const stageRef = useRef(null);
   const hostRef = useRef(null);
@@ -494,6 +722,7 @@ const PortfolioEditorPage = () => {
   const fileInputRef = useRef(null);
   const cameraMemory = useRef(null);
   const presentingRef = useRef(false);
+  const presentModeRef = useRef('editor');
   const stopPresentRef = useRef(() => {});
   const stepFrameRef = useRef(() => {});
   elementsRef.current = state.elements;
@@ -598,11 +827,26 @@ const PortfolioEditorPage = () => {
   useEffect(() => {
     const onKey = (event) => {
       const typing = ['INPUT', 'TEXTAREA'].includes(event.target.tagName);
+      const editingText = event.target.classList?.contains('pf-text-editor');
       if (event.code === 'Space' && !typing) {
         event.preventDefault();
         spaceRef.current = event.type === 'keydown';
       }
-      if (event.type !== 'keydown' || typing) return;
+      if (event.type !== 'keydown') return;
+      if (editingText) {
+        const key = event.key.toLowerCase();
+        const mod = event.metaKey || event.ctrlKey;
+        if (key === 'escape') {
+          event.preventDefault();
+          event.target.blur();
+        } else if (mod && (key === 'z' || key === 'y')) {
+          event.preventDefault();
+          event.target.blur();
+          dispatch({ type: key === 'y' || event.shiftKey ? 'redo' : 'undo' });
+        }
+        return;
+      }
+      if (typing) return;
       const key = event.key.toLowerCase();
       const mod = event.metaKey || event.ctrlKey;
       if (mod && key === 'z') {
@@ -614,6 +858,9 @@ const PortfolioEditorPage = () => {
       } else if (mod && key === 'd') {
         event.preventDefault();
         duplicate();
+      } else if (mod && key === 'a') {
+        event.preventDefault();
+        setSelection(elementsRef.current.filter((element) => element.visible !== false && !element.locked).map((element) => element.id));
       } else if (mod && key === 'c') {
         clipboardRef.current = elementsRef.current.filter((element) => selectionRef.current.includes(element.id));
       } else if (mod && key === 'v') {
@@ -628,12 +875,15 @@ const PortfolioEditorPage = () => {
         event.preventDefault();
         stepFrameRef.current(-1);
       } else if (key === 'escape') {
-        if (presentingRef.current) stopPresentRef.current();
+        if (presentingRef.current) {
+          stopPresentRef.current();
+          return;
+        }
         dispatch({ type: 'end' });
         setEditingId(null);
         setSelection([]);
         setShapesOpen(false);
-      }       else if (key === 'v') setTool('select');
+      } else if (key === 'v') setTool('select');
       else if (key === 'h') setTool('hand');
       else if (key === 'b') setTool('brush');
       else if (key === 't') setTool('text');
@@ -651,12 +901,60 @@ const PortfolioEditorPage = () => {
   }, []);
 
   const live = (id, partial) => {
-    const elements = elementsRef.current.map((element) => (element.id === id ? { ...element, ...partial } : element));
+    const elements = syncConnectors(elementsRef.current.map((element) => (element.id === id ? { ...element, ...partial } : element)));
     elementsRef.current = elements;
     dispatch({ type: 'live', elements });
   };
 
-  const commit = (elements) => dispatch({ type: 'commit', elements });
+  const commit = (elements) => dispatch({ type: 'commit', elements: syncConnectors(elements) });
+
+  const duplicateInPlace = (id) => {
+    const source = elementsRef.current.find((element) => element.id === id);
+    if (!source) return;
+    dispatch({ type: 'begin' });
+    const clone = cloneElement(source, 0);
+    const elements = [];
+    elementsRef.current.forEach((element) => {
+      if (element.id === id) elements.push(clone);
+      elements.push(element);
+    });
+    elementsRef.current = elements;
+    dispatch({ type: 'live', elements });
+  };
+
+  const finishTip = (id, index, x, y) => {
+    setTipDrag(null);
+    const current = elementsRef.current.find((element) => element.id === id);
+    if (!current?.points) {
+      dispatch({ type: 'end' });
+      return;
+    }
+    const points = current.points.slice();
+    points[index] = x;
+    points[index + 1] = y;
+    const draft = {
+      ...current,
+      points,
+      from: index === 0 ? null : current.from,
+      to: index === points.length - 2 ? null : current.to,
+    };
+    const linked = attachEnds(draft, elementsRef.current);
+    live(id, linked || { points, from: draft.from, to: draft.to });
+    dispatch({ type: 'end' });
+  };
+
+  const tipGuide = useMemo(() => {
+    if (!tipDrag) return null;
+    const arrow = state.elements.find((element) => element.id === tipDrag.id);
+    if (!isArrow(arrow)) return null;
+    const atEnd = tipDrag.end === 'to';
+    const points = arrow.points;
+    return {
+      id: arrow.id,
+      x: arrow.x + (atEnd ? points[points.length - 2] : points[0]),
+      y: arrow.y + (atEnd ? points[points.length - 1] : points[1]),
+    };
+  }, [tipDrag, state.elements]);
 
   const selectedElements = state.elements.filter((element) => selection.includes(element.id));
   const primary = selectedElements.length === 1 ? selectedElements[0] : null;
@@ -813,6 +1111,7 @@ const PortfolioEditorPage = () => {
       const next = { scale: nextScale, x: pointer.x - point.x * nextScale, y: pointer.y - point.y * nextScale };
       setCamera(next);
       cameraRef.current = next;
+      dispatch({ type: 'touch' });
       return;
     }
     let dx = native.deltaX;
@@ -903,6 +1202,10 @@ const PortfolioEditorPage = () => {
         points: kind === 'line' ? [0, 0, 0, 0] : null,
         route: kind === 'line' ? route : undefined,
         bend: kind === 'line' && route === 'curve' ? 48 : 0,
+        headStart: kind === 'line' ? 'none' : undefined,
+        headEnd: kind === 'line' ? 'triangle' : undefined,
+        dash: kind === 'line' ? 'solid' : undefined,
+        radius: kind === 'rect' ? 0 : undefined,
       });
       drawRef.current = { id: element.id, origin: world, type: kind };
       const elements = [...elementsRef.current, element];
@@ -979,6 +1282,10 @@ const PortfolioEditorPage = () => {
         : !box || (box.width < 6 && box.height < 6);
       if (tiny) dispatch({ type: 'undo' });
       else {
+        if (kind === 'line') {
+          const linked = attachEnds(element, elementsRef.current);
+          if (linked) live(element.id, linked);
+        }
         dispatch({ type: 'end' });
         setSelection([element.id]);
         if (kind !== 'brush') setTool('select');
@@ -1010,7 +1317,30 @@ const PortfolioEditorPage = () => {
   useDismiss(shareOpen, () => setShareOpen(false), shareRef);
 
   useEffect(() => {
-    const sync = () => setFull(Boolean(document.fullscreenElement));
+    const syncKeys = (event) => setModifiers({ shift: event.shiftKey, alt: event.altKey });
+    const clearKeys = () => setModifiers({ shift: false, alt: false });
+    window.addEventListener('keydown', syncKeys);
+    window.addEventListener('keyup', syncKeys);
+    window.addEventListener('blur', clearKeys);
+    return () => {
+      window.removeEventListener('keydown', syncKeys);
+      window.removeEventListener('keyup', syncKeys);
+      window.removeEventListener('blur', clearKeys);
+    };
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const ours = document.fullscreenElement === editorRef.current;
+      setFull(Boolean(document.fullscreenElement));
+      if (presentModeRef.current === 'entering' && ours) {
+        presentModeRef.current = 'presenting';
+        presentingRef.current = true;
+        setPresentMode('presenting');
+      } else if (presentModeRef.current === 'presenting' && !ours) {
+        stopPresentRef.current();
+      }
+    };
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
   }, []);
@@ -1058,23 +1388,40 @@ const PortfolioEditorPage = () => {
     cast.forEach(playMotion);
   };
 
+  const setMode = (mode) => {
+    presentModeRef.current = mode;
+    presentingRef.current = mode === 'entering' || mode === 'presenting';
+    setPresentMode(mode);
+  };
+
   const startPresent = () => {
+    if (presentModeRef.current !== 'editor') return;
     cameraMemory.current = { ...cameraRef.current };
     setFrameIndex(0);
-    setPresenting(true);
-    presentingRef.current = true;
+    setMode('entering');
     showFrame(0);
-    editorRef.current?.requestFullscreen?.().catch(() => {});
+    const node = editorRef.current;
+    if (!node?.requestFullscreen) {
+      setMode('presenting');
+      return;
+    }
+    node.requestFullscreen().then(() => {
+      if (presentModeRef.current === 'entering') setMode('presenting');
+    }).catch(() => {
+      if (presentModeRef.current === 'entering') setMode('presenting');
+    });
   };
 
   const stopPresent = () => {
-    setPresenting(false);
-    presentingRef.current = false;
+    if (presentModeRef.current === 'editor' || presentModeRef.current === 'exiting') return;
+    setMode('exiting');
     if (cameraMemory.current) {
       setCamera(cameraMemory.current);
       cameraRef.current = cameraMemory.current;
     }
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    setMode('editor');
+    const node = editorRef.current;
+    if (node && document.fullscreenElement === node) document.exitFullscreen?.().catch(() => {});
   };
   stopPresentRef.current = stopPresent;
 
@@ -1257,6 +1604,7 @@ const PortfolioEditorPage = () => {
               onDblClick={(event) => {
                 let node = event.target;
                 const stage = event.target.getStage();
+                const world = worldFromEvent(stage);
                 while (node && node !== stage) {
                   const element = elementsRef.current.find((item) => item.id === node.id());
                   if (element && element.type === 'link' && /^https?:\/\//i.test(element.href || '')) {
@@ -1267,7 +1615,15 @@ const PortfolioEditorPage = () => {
                     setPlayer({ src: element.src, title: element.name });
                     return;
                   }
-                  if (element && element.type !== 'line' && element.type !== 'image') {
+                  if (element && isArrow(element) && world) {
+                    const local = localPoint(element, world.x, world.y);
+                    commit(elementsRef.current.map((item) => (item.id === element.id
+                      ? { ...item, points: insertVertex(item.points, local.x, local.y), route: 'poly' }
+                      : item)));
+                    setSelection([element.id]);
+                    return;
+                  }
+                  if (element && element.type !== 'line' && element.type !== 'image' && element.type !== 'video' && element.type !== 'table') {
                     setEditingId(element.id);
                     return;
                   }
@@ -1293,15 +1649,27 @@ const PortfolioEditorPage = () => {
                     }}
                     onBegin={() => dispatch({ type: 'begin' })}
                     onLive={live}
-                    onEnd={() => dispatch({ type: 'end' })}
+                    onGuide={isArrow(element) ? (end) => setTipDrag({ id: element.id, end }) : undefined}
+                    onEnd={(index, x, y) => (typeof index === 'number' ? finishTip(element.id, index, x, y) : dispatch({ type: 'end' }))}
+                    onDuplicate={duplicateInPlace}
                     setNode={(id, node) => {
                       if (node) nodeRefs.current.set(id, node);
                       else nodeRefs.current.delete(id);
                     }}
                   />
                 ))}
+                {tipGuide && (
+                  <ConnectionGuides
+                    x={tipGuide.x}
+                    y={tipGuide.y}
+                    elements={state.elements}
+                    scale={camera.scale}
+                    accent={accent}
+                    ignoreId={tipGuide.id}
+                  />
+                )}
                 {marqueeBox && <Rect {...marqueeBox} fill={`${accent}33`} stroke={accent} listening={false} />}
-                <Transformer ref={transformerRef} rotateEnabled borderStroke={accent} anchorStroke={accent} anchorFill="#ffffff" />
+                <Transformer ref={transformerRef} rotateEnabled keepRatio={modifiers.shift} centeredScaling={modifiers.alt} borderStroke={accent} anchorStroke={accent} anchorFill="#ffffff" />
               </Layer>
             </Stage>
           )}
@@ -1310,17 +1678,9 @@ const PortfolioEditorPage = () => {
               className="pf-text-editor"
               autoFocus
               value={editing.text || ''}
-              style={{
-                left: camera.x + editing.x * camera.scale,
-                top: camera.y + editing.y * camera.scale,
-                width: Math.max(80, editing.width * camera.scale),
-                height: Math.max(32, editing.height * camera.scale),
-                fontSize: (editing.fontSize || 16) * camera.scale,
-                fontFamily: editing.fontFamily,
-                color: textColor(editing),
-                textAlign: editing.align || 'center',
-                transform: `rotate(${editing.rotation || 0}deg)`,
-              }}
+              aria-label={`Editar ${editing.name || 'texto'}`}
+              style={textEditorStyle(editing, camera)}
+              onMouseDown={(event) => event.stopPropagation()}
               onFocus={() => dispatch({ type: 'begin' })}
               onChange={(event) => live(editing.id, { text: event.target.value })}
               onBlur={() => { setEditingId(null); dispatch({ type: 'end' }); }}
@@ -1359,6 +1719,7 @@ const PortfolioEditorPage = () => {
                   ['straight', 'Recta'],
                   ['curve', 'Curva'],
                   ['elbow', 'Codo'],
+                  ['round', 'Redonda'],
                 ].map(([id, label]) => (
                   <button key={id} type="button" className={arrowRoute === id ? 'is-active' : ''} aria-pressed={arrowRoute === id} onClick={() => setArrowRoute(id)}>
                     {label}

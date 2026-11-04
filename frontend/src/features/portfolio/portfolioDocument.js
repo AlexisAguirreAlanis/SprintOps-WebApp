@@ -2,6 +2,24 @@
 // Konva dibuja la escena: React Flow ya está en el proyecto, pero modela grafos,
 // no un lienzo libre con rotación, selección y texto. Fabric encaja peor con React 19.
 
+import {
+  arrowPath,
+  bendFromPoint,
+  cornerRadius,
+  defaultBend,
+  isConnector,
+  syncConnectors,
+} from './connectorGeometry';
+
+export {
+  arrowPath,
+  bendFromPoint,
+  cornerRadius,
+  defaultBend,
+  isConnector,
+  syncConnectors,
+};
+
 export const SCHEMA_VERSION = 1;
 
 const INK = '#1e293b';
@@ -37,7 +55,7 @@ export function createElement(partial) {
     fill: WHITE,
     stroke: 'transparent',
     strokeWidth: 0,
-    radius: 16,
+    radius: 0,
     text: '',
     textFill: '',
     fontSize: 16,
@@ -97,52 +115,7 @@ export function textColor(element) {
 }
 
 export function isArrow(element) {
-  return element?.type === 'line'
-    && !element.closed
-    && !element.brush
-    && Array.isArray(element.points)
-    && element.points.length === 4;
-}
-
-export function defaultBend(points) {
-  const length = Math.hypot((points?.[2] || 0) - (points?.[0] || 0), (points?.[3] || 0) - (points?.[1] || 0));
-  return Math.max(36, Math.min(140, length * 0.35));
-}
-
-function controlPoint(points, bend) {
-  const [x1, y1, x2, y2] = points;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const length = Math.hypot(dx, dy) || 1;
-  return {
-    x: (x1 + x2) / 2 + (-dy / length) * bend,
-    y: (y1 + y2) / 2 + (dx / length) * bend,
-  };
-}
-
-export function bendFromPoint(points, x, y) {
-  const [x1, y1, x2, y2] = points;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const length = Math.hypot(dx, dy) || 1;
-  const px = -dy / length;
-  const py = dx / length;
-  return (x - (x1 + x2) / 2) * px + (y - (y1 + y2) / 2) * py;
-}
-
-export function arrowPath(element) {
-  const [x1, y1, x2, y2] = element.points;
-  const route = element.route || 'straight';
-  if (route === 'elbow') {
-    const mid = (x1 + x2) / 2;
-    return { points: [x1, y1, mid, y1, mid, y2, x2, y2], tension: 0 };
-  }
-  if (route === 'curve') {
-    const bend = Number.isFinite(element.bend) ? element.bend : defaultBend(element.points);
-    const control = controlPoint(element.points, bend);
-    return { points: [x1, y1, control.x, control.y, x2, y2], tension: 0.55, control };
-  }
-  return { points: [x1, y1, x2, y2], tension: 0 };
+  return isConnector(element);
 }
 
 export function elementBounds(element) {

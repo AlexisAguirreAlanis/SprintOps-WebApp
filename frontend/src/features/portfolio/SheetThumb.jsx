@@ -1,4 +1,5 @@
 import { arrowPath, isArrow, textColor } from './portfolioDocument';
+import { headKind, lineCount, parallelCopies } from './connectorGeometry';
 
 const SheetThumb = ({ elements = [], className = '' }) => {
   const visible = elements.filter((element) => element.visible !== false);
@@ -43,15 +44,17 @@ const SheetThumb = ({ elements = [], className = '' }) => {
           const baseX = x2 - ux * 11;
           const baseY = y2 - uy * 11;
           const stroke = element.stroke || '#1e293b';
-          const points = world.join(' ');
+          const copies = element.closed ? [world] : parallelCopies(world, lineCount(element), (element.strokeWidth || 2) + 4);
           return (
             <g key={element.id}>
-              {element.closed ? (
-                <polygon points={points} fill={element.fill && element.fill !== 'transparent' ? element.fill : 'none'} stroke={stroke} strokeWidth={element.strokeWidth || 2} />
-              ) : (
-                <polyline points={points} fill="none" stroke={stroke} strokeWidth={element.strokeWidth || 2} />
-              )}
-              {isArrow(element) && (
+              {copies.map((copy, index) => (
+                element.closed ? (
+                  <polygon key={index} points={copy.join(' ')} fill={element.fill && element.fill !== 'transparent' ? element.fill : 'none'} stroke={stroke} strokeWidth={element.strokeWidth || 2} />
+                ) : (
+                  <polyline key={index} points={copy.join(' ')} fill="none" stroke={stroke} strokeWidth={element.strokeWidth || 2} />
+                )
+              ))}
+              {isArrow(element) && headKind(element, true) !== 'none' && (
                 <polygon points={`${x2},${y2} ${baseX - uy * 6},${baseY + ux * 6} ${baseX + uy * 6},${baseY - ux * 6}`} fill={stroke} />
               )}
             </g>

@@ -33,7 +33,7 @@ export function shapeElements(id) {
   if (id === 'triangle') {
     return [{ type: 'line', name: 'Triángulo', width: 1, height: 1, points: [80, 0, 160, 140, 0, 140, 80, 0], stroke: '#1e293b', strokeWidth: 3, fill: '#f6f1e8', text: '', closed: true }];
   }
-  return [{ type: 'rect', name: 'Rectángulo', width: 180, height: 120, fill: '#ffffff', radius: 16, text: '' }];
+  return [{ type: 'rect', name: 'Rectángulo', width: 180, height: 120, fill: '#ffffff', radius: 0, text: '' }];
 }
 
 export function deviceElements(id) {
