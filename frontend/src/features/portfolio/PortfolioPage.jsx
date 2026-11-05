@@ -1,18 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
-  Briefcase,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Folder,
   LayoutGrid,
-  Link2,
   List,
   Plus,
   Search,
   Star,
-  Users,
   MoreHorizontal,
 } from 'lucide-react';
 import { useAuth } from '../auth/hooks/useAuth';
@@ -20,7 +18,9 @@ import { useProjects } from '../project/hooks/useProjects';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
 import { useDismiss } from '../home/useDismiss';
-import { editedLabel, listTemplates, templateDocument } from './portfolioDocument';
+import { editedLabel, listStripTemplates, listTemplateCatalog, templateDocument } from './portfolioDocument';
+import TemplateGallery from './TemplateGallery';
+import CreateSheetModal from './CreateSheetModal';
 import SheetThumb from './SheetThumb';
 import './portfolio.css';
 
@@ -39,18 +39,116 @@ const SORTS = [
   { id: 'name-desc', label: 'Nombre Z-A' },
 ];
 
-const METRICS = [
-  { id: 'all', label: 'Hojas', icon: Briefcase, pick: (items) => items.filter((sheet) => !sheet.deleted && !sheet.archived).length },
-  { id: 'shared', label: 'Compartidas', icon: Link2, pick: (items) => items.filter((sheet) => !sheet.deleted && !sheet.archived && sheet.shared).length },
-  { id: 'team', label: 'En equipo', icon: Users, pick: (items) => items.filter((sheet) => !sheet.deleted && !sheet.archived && sheet.team).length },
-  { id: 'favorites', label: 'Favoritas', icon: Star, pick: (items) => items.filter((sheet) => !sheet.deleted && !sheet.archived && sheet.favorite).length },
-];
+const MENU_CAP = 248;
+
+function SheetMenu({ anchorRef, open, children }) {
+  const menuRef = useRef(null);
+  const bodyRef = useRef(null);
+  const [box, setBox] = useState(null);
+  const [thumb, setThumb] = useState(null);
+  const [shown, setShown] = useState(false);
+  const [mounted, setMounted] = useState(open);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const frame = window.requestAnimationFrame(() => setShown(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    setShown(false);
+    const timer = window.setTimeout(() => setMounted(false), 200);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  const syncThumb = () => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const overflow = body.scrollHeight - body.clientHeight;
+    if (overflow <= 1) {
+      setThumb((current) => (current ? null : current));
+      return;
+    }
+    const track = body.clientHeight;
+    const size = Math.max(28, Math.round((body.clientHeight / body.scrollHeight) * track));
+    const offset = Math.round((body.scrollTop / overflow) * (track - size));
+    setThumb((current) => (current && current.size === size && current.offset === offset ? current : { size, offset }));
+  };
+
+  useLayoutEffect(() => {
+    if (!mounted) return undefined;
+    const place = () => {
+      const anchor = anchorRef.current;
+      const menu = menuRef.current;
+      const body = bodyRef.current;
+      if (!anchor || !menu || !body) return;
+      const rect = anchor.getBoundingClientRect();
+      const margin = 10;
+      const width = 224;
+      const content = body.scrollHeight + 12;
+      const needed = Math.min(content, MENU_CAP);
+      const spaceBelow = window.innerHeight - rect.bottom - margin;
+      const spaceAbove = rect.top - margin;
+      const upward = spaceBelow < needed && spaceAbove > spaceBelow;
+      const room = Math.max(0, upward ? spaceAbove : spaceBelow);
+      const height = Math.round(Math.min(needed, room));
+      let left = Math.round(rect.right - width);
+      left = Math.max(margin, Math.min(left, window.innerWidth - margin - width));
+      const top = Math.round(upward ? Math.max(margin, rect.top - 6 - height) : rect.bottom + 6);
+      setBox((current) => (
+        current
+        && current.top === top
+        && current.left === left
+        && current.height === height
+        && current.upward === upward
+          ? current
+          : { top, left, height, upward }
+      ));
+      syncThumb();
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    if (bodyRef.current) observer.observe(bodyRef.current);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [anchorRef, mounted]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className={`ps-popover pf-sheet-menu${box?.upward ? ' is-up' : ''}${shown ? ' is-open' : ''}${thumb ? ' is-scroll' : ''}`}
+      role="menu"
+      data-hide-scrollbar
+      style={box
+        ? { top: box.top, left: box.left, height: box.height }
+        : { top: -9999, left: 0 }}
+    >
+      <div ref={bodyRef} className="pf-sheet-menu-body" data-hide-scrollbar onScroll={syncThumb}>
+        {children}
+      </div>
+      {thumb && (
+        <div className="pf-sheet-menu-bar" aria-hidden="true">
+          <span style={{ height: thumb.size, transform: `translateY(${thumb.offset}px)` }} />
+        </div>
+      )}
+    </div>,
+    document.body,
+  );
+}
 
 const PortfolioPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { projects } = useProjects(user?.id);
-  const templates = useMemo(() => listTemplates(), []);
+  const templates = useMemo(() => listStripTemplates(), []);
+  const catalog = useMemo(() => listTemplateCatalog(), []);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [sheets, setSheets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,6 +157,7 @@ const PortfolioPage = () => {
   const [sort, setSort] = useState('activity');
   const [sortOpen, setSortOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [kindOpen, setKindOpen] = useState(false);
   const [view, setView] = useLocalStorage('sprintops.portfolio.view', 'grid');
   const [menuId, setMenuId] = useState(null);
   const [rename, setRename] = useState('');
@@ -67,20 +166,35 @@ const PortfolioPage = () => {
   const sortRef = useRef(null);
   const stripRef = useRef(null);
   const railRef = useRef(null);
+  const sheetsRef = useRef(null);
+  const menuAnchorRef = useRef(null);
+  const menuSheetRef = useRef(null);
   const [rail, setRail] = useState({ left: false, right: false });
   useDismiss(createOpen, () => setCreateOpen(false), createRef);
   useDismiss(sortOpen, () => setSortOpen(false), sortRef);
 
+  const loadToken = useRef(0);
   const load = async () => {
     if (!user?.id) return;
+    const token = ++loadToken.current;
     setLoading(true);
     setError('');
+    const pull = () => portfolioRepository.list(user.id);
     try {
-      setSheets(await portfolioRepository.list(user.id));
+      let data;
+      try {
+        data = await pull();
+      } catch {
+        data = await pull();
+      }
+      if (token !== loadToken.current) return;
+      setSheets(data);
+      setError('');
     } catch (err) {
+      if (token !== loadToken.current) return;
       setError(err.message || 'No se pudieron cargar las hojas.');
     } finally {
-      setLoading(false);
+      if (token === loadToken.current) setLoading(false);
     }
   };
 
@@ -132,7 +246,8 @@ const PortfolioPage = () => {
   useEffect(() => {
     if (!menuId) return undefined;
     const close = (event) => {
-      if (!event.target.closest('.pf-sheet')) setMenuId(null);
+      if (event.target.closest('.pf-sheet-menu, .pf-sheet-more')) return;
+      setMenuId(null);
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
@@ -158,7 +273,41 @@ const PortfolioPage = () => {
     });
   }, [sheets, query, filter, sort]);
 
-  const createSheet = async (templateId) => {
+  useLayoutEffect(() => {
+    const viewport = sheetsRef.current;
+    if (!viewport) return undefined;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const fadeMax = Math.min(48, Math.max(24, Math.round(viewport.clientHeight * 0.07)));
+      const maxScroll = viewport.scrollHeight - viewport.clientHeight;
+      const active = maxScroll > 2;
+      const length = (distance) => {
+        const span = Math.max(64, fadeMax * 1.25);
+        const t = Math.min(1, Math.max(0, distance / span));
+        const eased = t * t * (3 - 2 * t);
+        return `${Math.round(fadeMax * eased)}px`;
+      };
+      viewport.style.setProperty('--fade-top', active ? length(viewport.scrollTop) : '0px');
+      viewport.style.setProperty('--fade-bottom', active ? length(maxScroll - viewport.scrollTop) : '0px');
+    };
+    const schedule = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(update);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(viewport);
+    if (viewport.firstElementChild) observer.observe(viewport.firstElementChild);
+    viewport.addEventListener('scroll', schedule, { passive: true });
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener('scroll', schedule);
+      observer.disconnect();
+    };
+  }, [loading, visible.length, view]);
+
+  const createSheet = async (templateId, name) => {
     if (!user?.id || busy) return;
     setBusy(true);
     setError('');
@@ -166,7 +315,7 @@ const PortfolioPage = () => {
       const built = templateDocument(templateId);
       const sheet = await portfolioRepository.create({
         userId: user.id,
-        name: templateId === 'blank' ? 'Sin título' : built.name,
+        name: name?.trim() || (templateId === 'blank' ? 'Sin título' : built.name),
         document: built.document,
       });
       navigate(`/portafolio/${sheet.id}`);
@@ -183,13 +332,18 @@ const PortfolioPage = () => {
 
   const openMenu = (event, sheet) => {
     event.stopPropagation();
+    menuAnchorRef.current = event.currentTarget;
     setMenuId((current) => (current === sheet.id ? null : sheet.id));
     setRename(sheet.name);
   };
 
+  const activeMenuSheet = sheets.find((sheet) => sheet.id === menuId);
+  if (activeMenuSheet) menuSheetRef.current = activeMenuSheet;
+  const menuSheet = activeMenuSheet || menuSheetRef.current;
+
   return (
-    <div className="pf-page flex min-h-full w-full min-w-0 shrink-0 flex-col px-4 pb-16 pt-5 md:px-6 lg:px-8">
-      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="pf-page flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden px-4 pt-5 md:px-6 lg:px-8">
+      <div className="mb-5 flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-3xl font-black tracking-tight md:text-4xl">Portafolio</h1>
           <p className="pf-kicker mt-1 max-w-2xl text-sm md:text-base">
@@ -198,7 +352,7 @@ const PortfolioPage = () => {
         </div>
         <div className="relative" ref={createRef}>
           <div className="ps-split">
-            <button type="button" className="ps-primary" disabled={busy} onClick={() => createSheet('blank')}>
+            <button type="button" className="ps-primary" disabled={busy} onClick={() => { setCreateOpen(false); setKindOpen(true); }}>
               <Plus size={16} /> Crear hoja
             </button>
             <button
@@ -212,13 +366,12 @@ const PortfolioPage = () => {
             </button>
           </div>
           <div className={`ps-popover ps-join-pop right-0 w-56${createOpen ? ' is-open' : ''}`} role="menu" inert={!createOpen}>
-            <button type="button" className="ps-menu-item" onClick={() => createSheet('blank')}>Lienzo en blanco</button>
             <button
               type="button"
               className="ps-menu-item"
               onClick={() => {
                 setCreateOpen(false);
-                stripRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                setGalleryOpen(true);
               }}
             >
               Crear desde plantilla
@@ -229,22 +382,7 @@ const PortfolioPage = () => {
 
       {error && <p className="pf-error mb-4 text-sm font-semibold">{error}</p>}
 
-      <div className="pf-metrics mb-6">
-        {METRICS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button key={item.id} type="button" className={`ps-metric pf-metric ${filter === item.id ? 'is-active' : ''}`} onClick={() => setFilter(item.id)}>
-              <span className="ps-metric-icon"><Icon size={18} /></span>
-              <div>
-                <p className="text-2xl font-black tabular-nums leading-none">{loading ? '—' : item.pick(sheets)}</p>
-                <p className="pf-kicker mt-1 text-sm font-medium">{item.label}</p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mb-6" ref={stripRef}>
+      <div className="mb-3 shrink-0" ref={stripRef}>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-black">Crear desde una plantilla</h2>
         </div>
@@ -270,7 +408,7 @@ const PortfolioPage = () => {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+      <div className="mb-3 flex shrink-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
         <div className="ps-tabs" role="tablist">
           {FILTERS.map((item) => (
             <button key={item.id} type="button" className={filter === item.id ? 'is-active' : ''} onClick={() => setFilter(item.id)}>
@@ -318,6 +456,7 @@ const PortfolioPage = () => {
         </div>
       </div>
 
+      <div ref={sheetsRef} className="pf-sheets scroll-edge-fade">
       {loading ? (
         <div className={view === 'list' ? 'pf-list' : 'pf-grid'}>
           {Array.from({ length: 3 }, (_, index) => <div key={index} className="ps-skeleton h-56" />)}
@@ -326,7 +465,7 @@ const PortfolioPage = () => {
         <div className="ps-empty">
           <Folder size={28} />
           <h2>{sheets.length === 0 ? 'Aún no tienes hojas' : 'No hay hojas con ese filtro'}</h2>
-          <p>{sheets.length === 0 ? 'Crea un lienzo en blanco o empieza desde una plantilla.' : 'Prueba con otra búsqueda o limpia el filtro.'}</p>
+          <p>{sheets.length === 0 ? 'Crea un documento, una presentación o un freeflow.' : 'Prueba con otra búsqueda o limpia el filtro.'}</p>
         </div>
       ) : (
         <div className={view === 'list' ? 'pf-list' : 'pf-grid'}>
@@ -350,61 +489,80 @@ const PortfolioPage = () => {
                   >
                     <Star size={16} fill={sheet.favorite ? 'currentColor' : 'none'} />
                   </button>
-                  <div className="relative">
-                    <button type="button" className="pf-icon-btn" aria-label={`Acciones de ${sheet.name}`} onClick={(event) => openMenu(event, sheet)}>
-                      <MoreHorizontal size={16} />
-                    </button>
-                    {menuId === sheet.id && (
-                      <div className="ps-popover right-0 w-56" role="menu">
-                        {sheet.canManage && !sheet.deleted && (
-                          <form
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              patch(sheet, { name: rename }).then(() => setMenuId(null)).catch((err) => setError(err.message));
-                            }}
-                          >
-                            <input className="ps-quiet mb-1 w-full" value={rename} aria-label="Nuevo nombre" onChange={(event) => setRename(event.target.value)} />
-                          </form>
-                        )}
-                        {!sheet.deleted && (
-                          <button type="button" className="ps-menu-item" onClick={() => portfolioRepository.duplicate(sheet.id, user.id).then((copy) => setSheets((current) => [copy, ...current])).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
-                            Duplicar
-                          </button>
-                        )}
-                        {sheet.canManage && !sheet.deleted && (
-                          <button type="button" className="ps-menu-item" onClick={() => patch(sheet, { archived: !sheet.archived }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
-                            {sheet.archived ? 'Restaurar' : 'Archivar'}
-                          </button>
-                        )}
-                        {sheet.canManage && sheet.deleted && (
-                          <button type="button" className="ps-menu-item" onClick={() => patch(sheet, { deleted: false, archived: false }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
-                            Restaurar
-                          </button>
-                        )}
-                        {sheet.canManage && !sheet.deleted && (
-                          <button type="button" className="ps-menu-item" onClick={() => patch(sheet, { deleted: true }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
-                            Eliminar
-                          </button>
-                        )}
-                        {sheet.canManage && !sheet.deleted && (
-                          <>
-                            <p className="px-2 pt-2 text-[11px] font-bold uppercase text-[var(--app-muted)]">Vincular a proyecto</p>
-                            <button type="button" className="ps-menu-item" onClick={() => patch(sheet, { projectId: null }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>Sin proyecto</button>
-                            {projects.slice(0, 8).map((project) => (
-                              <button key={project.id} type="button" className="ps-menu-item" onClick={() => patch(sheet, { projectId: project.id }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
-                                {project.name}
-                              </button>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <button type="button" className="pf-icon-btn pf-sheet-more" aria-label={`Acciones de ${sheet.name}`} aria-expanded={menuId === sheet.id} onClick={(event) => openMenu(event, sheet)}>
+                    <MoreHorizontal size={16} />
+                  </button>
                 </div>
               </div>
             </article>
           ))}
         </div>
+      )}
+      </div>
+      <TemplateGallery
+        open={galleryOpen}
+        templates={catalog}
+        busy={busy}
+        onClose={() => setGalleryOpen(false)}
+        onPick={(templateId) => {
+          setGalleryOpen(false);
+          createSheet(templateId);
+        }}
+      />
+      <CreateSheetModal
+        open={kindOpen}
+        busy={busy}
+        onClose={() => setKindOpen(false)}
+        onCreate={(kind, name) => {
+          setKindOpen(false);
+          const templateId = kind === 'document' ? 'doc-blank' : kind === 'slides' ? 'slides-blank' : 'blank';
+          createSheet(templateId, name);
+        }}
+      />
+      {menuSheet && (
+        <SheetMenu key={menuSheet.id} anchorRef={menuAnchorRef} open={menuId === menuSheet.id}>
+          {menuSheet.canManage && !menuSheet.deleted && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                patch(menuSheet, { name: rename }).then(() => setMenuId(null)).catch((err) => setError(err.message));
+              }}
+            >
+              <input className="ps-quiet mb-1 w-full" value={rename} aria-label="Nuevo nombre" onChange={(event) => setRename(event.target.value)} />
+            </form>
+          )}
+          {!menuSheet.deleted && (
+            <button type="button" className="ps-menu-item" onClick={() => portfolioRepository.duplicate(menuSheet.id, user.id).then((copy) => setSheets((current) => [copy, ...current])).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
+              Duplicar
+            </button>
+          )}
+          {menuSheet.canManage && !menuSheet.deleted && (
+            <button type="button" className={`ps-menu-item${menuSheet.archived ? '' : ' is-muted'}`} onClick={() => patch(menuSheet, { archived: !menuSheet.archived }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
+              {menuSheet.archived ? 'Restaurar' : 'Archivar'}
+            </button>
+          )}
+          {menuSheet.canManage && menuSheet.deleted && (
+            <button type="button" className="ps-menu-item" onClick={() => patch(menuSheet, { deleted: false, archived: false }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
+              Restaurar
+            </button>
+          )}
+          {menuSheet.canManage && !menuSheet.deleted && (
+            <button type="button" className="ps-menu-item ps-menu-item-danger" onClick={() => patch(menuSheet, { deleted: true }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
+              Eliminar
+            </button>
+          )}
+          {menuSheet.canManage && !menuSheet.deleted && (
+            <>
+              <p className="px-2 pt-2 text-[11px] font-bold uppercase text-[var(--app-muted)]">Vincular a proyecto</p>
+              <button type="button" className="ps-menu-item" onClick={() => patch(menuSheet, { projectId: null }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>Sin proyecto</button>
+              {projects.slice(0, 8).map((project) => (
+                <button key={project.id} type="button" className="ps-menu-item" onClick={() => patch(menuSheet, { projectId: project.id }).then(() => setMenuId(null)).catch((err) => setError(err.message))}>
+                  {project.name}
+                </button>
+              ))}
+            </>
+          )}
+        </SheetMenu>
       )}
     </div>
   );

@@ -1526,7 +1526,6 @@ html[data-theme="themed"] .bg-\[\#67BFA1\] .text-white {
   display: inline-flex;
   overflow: hidden;
   border-radius: 14px;
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--app-accent) 28%, transparent);
 }
 
 .ps-primary,

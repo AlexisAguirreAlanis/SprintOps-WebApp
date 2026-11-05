@@ -12,6 +12,25 @@ import {
 import { buildTemplate, listTemplates } from './portfolioDocument';
 import { STICKERS, TEXT_PRESETS, SHAPES, shapeElements, deviceElements, kitElements, appElements } from './editorCatalog';
 import { searchCommons } from './editorMedia';
+import PanelToggleIcon from './PanelToggleIcon';
+import ShapeGlyph from './ShapeGlyph';
+
+const RECENT_KEY = 'sprintops.recent-elements';
+
+function readRecent() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((item) => item && item.key).slice(0, 8) : [];
+  } catch {
+    return [];
+  }
+}
+
+function pushRecent(entry) {
+  const next = [entry, ...readRecent().filter((item) => item.key !== entry.key)].slice(0, 8);
+  window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  return next;
+}
 
 const SECTIONS = [
   { id: 'templates', label: 'Plantillas', icon: LayoutTemplate },
@@ -31,6 +50,7 @@ const EditorLibrary = ({ open, section, onSection, onToggle, onInsert, uploads }
   const [media, setMedia] = useState([]);
   const [mediaState, setMediaState] = useState('idle');
   const [expanded, setExpanded] = useState({});
+  const [recent, setRecent] = useState(readRecent);
   const needle = query.trim().toLowerCase();
   const match = (label) => !needle || label.toLowerCase().includes(needle);
 
@@ -61,6 +81,17 @@ const EditorLibrary = ({ open, section, onSection, onToggle, onInsert, uploads }
     if (!open) onToggle();
   };
 
+  const insertCatalog = (kind, id, name) => {
+    setRecent(pushRecent({ key: `${kind}:${id}`, kind, id, name }));
+    if (kind === 'shape') {
+      onInsert(shapeElements(id));
+      return;
+    }
+    const figure = STICKERS.find((item) => item.name === id);
+    if (!figure) return;
+    onInsert([{ type: 'image', name: figure.name, width: 140, height: 140, src: figure.src, text: '', fill: 'transparent', credit: 'Figurita de SprintOps' }]);
+  };
+
   return (
     <aside className={`pf-library${open ? ' is-open' : ''}`}>
       <nav className="pf-rail" aria-label="Biblioteca">
@@ -79,7 +110,7 @@ const EditorLibrary = ({ open, section, onSection, onToggle, onInsert, uploads }
         <div className="pf-drawer-inner">
           <div className="pf-drawer-head">
             <h2>{SECTIONS.find((item) => item.id === section)?.label}</h2>
-            <button type="button" className="pf-icon-btn" aria-label="Compactar biblioteca" onClick={onToggle}>–</button>
+            <button type="button" className="pf-icon-btn pf-panel-toggle" aria-label="Compactar biblioteca" onClick={onToggle}><PanelToggleIcon /></button>
           </div>
           <div className="pf-drawer-tools">
             <input className="pf-search" value={query} placeholder={section === 'media' ? 'Buscar en Commons…' : 'Buscar'} aria-label="Buscar en la biblioteca" onChange={(event) => setQuery(event.target.value)} />
@@ -96,27 +127,31 @@ const EditorLibrary = ({ open, section, onSection, onToggle, onInsert, uploads }
             )}
             {section === 'elements' && (
               <>
-                <AssetGroup title="Formas" expanded={expanded.shapes} onToggle={() => setExpanded((current) => ({ ...current, shapes: !current.shapes }))}>
-                  {SHAPES.filter((item) => match(item.name)).map((item) => (
-                    <button key={item.id} type="button" className="pf-asset" onClick={() => onInsert(shapeElements(item.id))}>
-                      {item.id === 'line' ? (
-                        <svg className="pf-shape-mark is-line" viewBox="0 0 64 28" aria-hidden="true">
-                          <path d="M4 14 H36" />
-                          <path d="M34 4 L60 14 L34 24 Z" />
-                        </svg>
-                      ) : (
-                        <span className={`pf-shape-mark is-${item.id}`} aria-hidden="true" />
-                      )}
-                      <span>{item.name}</span>
-                    </button>
+                <section className="pf-asset-group">
+                  <div className="pf-asset-group-head"><h3>Usados recientemente</h3></div>
+                  {recent.filter((item) => match(item.name)).length === 0 ? (
+                    <p className="pf-kicker">Lo que insertes desde Figuras o Formas queda aquí.</p>
+                  ) : (
+                    <div className="pf-recent">
+                      {recent.filter((item) => match(item.name)).map((item) => (
+                        <ElementTile
+                          key={item.key}
+                          item={item.kind === 'shape' ? SHAPES.find((shape) => shape.id === item.id) : STICKERS.find((figure) => figure.name === item.id)}
+                          kind={item.kind}
+                          onPick={() => insertCatalog(item.kind, item.id, item.name)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+                <AssetGroup title="Figuras" expanded={expanded.figures !== false} onToggle={() => setExpanded((current) => ({ ...current, figures: current.figures === false }))}>
+                  {STICKERS.filter((item) => match(item.name)).map((item) => (
+                    <ElementTile key={item.name} item={item} kind="figure" onPick={() => insertCatalog('figure', item.name, item.name)} />
                   ))}
                 </AssetGroup>
-                <AssetGroup title="Figuritas" expanded={expanded.stickers} onToggle={() => setExpanded((current) => ({ ...current, stickers: !current.stickers }))}>
-                  {STICKERS.filter((item) => match(item.name)).map((item) => (
-                    <button key={item.name} type="button" className="pf-asset pf-asset-visual" onClick={() => onInsert([{ type: 'image', name: item.name, width: 140, height: 140, src: item.src, text: '', fill: 'transparent', credit: 'Figurita de SprintOps' }])}>
-                      <img src={item.src} alt="" />
-                      <span>{item.name}</span>
-                    </button>
+                <AssetGroup title="Formas" expanded={expanded.shapes !== false} onToggle={() => setExpanded((current) => ({ ...current, shapes: current.shapes === false }))}>
+                  {SHAPES.filter((item) => match(item.name)).map((item) => (
+                    <ElementTile key={item.id} item={item} kind="shape" onPick={() => insertCatalog('shape', item.id, item.name)} />
                   ))}
                 </AssetGroup>
               </>
@@ -192,6 +227,16 @@ const EditorLibrary = ({ open, section, onSection, onToggle, onInsert, uploads }
         </div>
       </div>
     </aside>
+  );
+};
+
+const ElementTile = ({ item, kind, onPick }) => {
+  if (!item) return null;
+  return (
+    <button type="button" className="pf-asset pf-shape-tile" onClick={onPick}>
+      {kind === 'shape' ? <ShapeGlyph id={item.id} /> : <img src={item.src} alt="" />}
+      <span>{item.name}</span>
+    </button>
   );
 };
 

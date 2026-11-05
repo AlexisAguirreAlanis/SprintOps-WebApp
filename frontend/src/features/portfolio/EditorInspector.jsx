@@ -17,6 +17,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { defaultBend, isArrow } from './portfolioDocument';
+import PanelToggleIcon from './PanelToggleIcon';
 import { arrowPath, DASH_OPTIONS, endAngle, HEAD_OPTIONS, parallelCopies, ROUTE_OPTIONS, trimPolyline } from './connectorGeometry';
 
 const TABS = [
@@ -592,7 +593,7 @@ const EditorInspector = ({
             </button>
           ))}
         </div>
-        <button type="button" className="pf-icon-btn" aria-label="Compactar panel" onClick={onToggle}>–</button>
+        <button type="button" className="pf-icon-btn pf-panel-toggle" aria-label="Compactar panel" onClick={onToggle}><PanelToggleIcon /></button>
       </div>
       <div className="pf-inspector-body">
         {!primary && <p className="pf-kicker">{selectedElements.length > 1 ? `${selectedElements.length} elementos` : 'Nada seleccionado'}</p>}

@@ -325,30 +325,24 @@ public class HojaService {
         List<Map<String, Object>> items = new ArrayList<>();
         if (document == null || document.isBlank()) return items;
         try {
-            JsonNode elements = objectMapper.readTree(document).path("elements");
+            JsonNode root = objectMapper.readTree(document);
+            String kind = root.path("kind").asText("");
+            if ("document".equals(kind)) return documentPreview(root.path("doc"));
+            JsonNode elements = root.path("elements");
+            if ("slides".equals(kind)) {
+                JsonNode slides = root.path("slides");
+                if (slides.isArray() && slides.size() > 0) {
+                    JsonNode first = slides.get(0);
+                    items.add(previewBox(0, 0, 1280, 720, first.path("background").asText("#ffffff"), ""));
+                    elements = first.path("elements");
+                }
+            }
             if (!elements.isArray()) return items;
-            int kept = 0;
+            int kept = items.size();
             for (JsonNode el : elements) {
                 if (kept >= 24) break;
                 if (!el.path("visible").asBoolean(true)) continue;
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("type", el.path("type").asText("rect"));
-                item.put("x", el.path("x").asDouble(0));
-                item.put("y", el.path("y").asDouble(0));
-                item.put("width", el.path("width").asDouble(40));
-                item.put("height", el.path("height").asDouble(40));
-                item.put("rotation", el.path("rotation").asDouble(0));
-                item.put("fill", el.path("fill").asText("#ffffff"));
-                item.put("stroke", el.path("stroke").asText(""));
-                item.put("strokeWidth", el.path("strokeWidth").asDouble(0));
-                item.put("radius", el.path("radius").asDouble(0));
-                String text = el.path("text").asText("");
-                if (!text.isEmpty()) item.put("text", text.length() > 48 ? text.substring(0, 48) : text);
-                if (el.path("points").isArray()) {
-                    List<Double> points = new ArrayList<>();
-                    for (JsonNode point : el.path("points")) points.add(point.asDouble());
-                    item.put("points", points);
-                }
+                Map<String, Object> item = previewShape(el);
                 items.add(item);
                 kept++;
             }
@@ -356,6 +350,75 @@ public class HojaService {
             return items;
         }
         return items;
+    }
+
+    private List<Map<String, Object>> documentPreview(JsonNode doc) {
+        String raw = "";
+        JsonNode pages = doc.path("pages");
+        if (pages.isArray()) {
+            StringBuilder builder = new StringBuilder();
+            for (JsonNode page : pages) builder.append(' ').append(page.path("html").asText(""));
+            raw = builder.toString().replaceAll("<[^>]+>", " ").replace("&nbsp;", " ").replaceAll("\\s+", " ").trim();
+        }
+        String title = raw.isEmpty() ? "Documento" : raw.substring(0, Math.min(28, raw.length()));
+        List<Map<String, Object>> items = new ArrayList<>();
+        Map<String, Object> page = previewBox(12, 8, 216, 284, "#ffffff", "");
+        page.put("stroke", "#e5e7eb");
+        page.put("strokeWidth", 1);
+        page.put("radius", 8);
+        items.add(page);
+        Map<String, Object> heading = previewBox(28, 28, 176, 40, "transparent", title);
+        heading.put("type", "text");
+        heading.put("textFill", "#1e293b");
+        heading.put("fontSize", 15);
+        heading.put("fontWeight", 800);
+        heading.put("align", "left");
+        items.add(heading);
+        items.add(previewBox(28, 76, 52, 4, "#67bfa1", ""));
+        for (int index = 0; index < 6; index++) {
+            items.add(previewBox(28, 96 + index * 22, index == 5 ? 110 : 168, 6, "#e6eef2", ""));
+        }
+        return items;
+    }
+
+    private Map<String, Object> previewShape(JsonNode el) {
+        Map<String, Object> item = previewBox(
+                el.path("x").asDouble(0),
+                el.path("y").asDouble(0),
+                el.path("width").asDouble(40),
+                el.path("height").asDouble(40),
+                el.path("fill").asText("#ffffff"),
+                "");
+        item.put("type", el.path("type").asText("rect"));
+        item.put("rotation", el.path("rotation").asDouble(0));
+        item.put("stroke", el.path("stroke").asText(""));
+        item.put("strokeWidth", el.path("strokeWidth").asDouble(0));
+        item.put("radius", el.path("radius").asDouble(0));
+        if (el.has("fontSize")) item.put("fontSize", el.path("fontSize").asDouble(16));
+        if (el.has("fontWeight")) item.put("fontWeight", el.path("fontWeight").asInt(600));
+        if (el.has("textFill") && !el.path("textFill").asText("").isEmpty()) item.put("textFill", el.path("textFill").asText(""));
+        if (el.has("align")) item.put("align", el.path("align").asText("left"));
+        if (el.path("closed").asBoolean(false)) item.put("closed", true);
+        String text = el.path("text").asText("");
+        if (!text.isEmpty()) item.put("text", text.length() > 42 ? text.substring(0, 42) : text);
+        if (el.path("points").isArray()) {
+            List<Double> points = new ArrayList<>();
+            for (JsonNode point : el.path("points")) points.add(point.asDouble());
+            item.put("points", points);
+        }
+        return item;
+    }
+
+    private Map<String, Object> previewBox(double x, double y, double width, double height, String fill, String text) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("type", "rect");
+        item.put("x", x);
+        item.put("y", y);
+        item.put("width", width);
+        item.put("height", height);
+        item.put("fill", fill);
+        if (!text.isEmpty()) item.put("text", text);
+        return item;
     }
 
     @Transactional(readOnly = true)

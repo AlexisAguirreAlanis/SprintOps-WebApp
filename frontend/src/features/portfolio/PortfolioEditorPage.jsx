@@ -16,7 +16,6 @@ import {
   PenLine,
   Plus,
   Redo2,
-  Share2,
   SprayCan,
   Square,
   Star,
@@ -28,7 +27,6 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../auth/hooks/useAuth';
-import { useProjects } from '../project/hooks/useProjects';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
 import { useDismiss } from '../home/useDismiss';
 import {
@@ -65,8 +63,12 @@ import {
   trimPolyline,
 } from './connectorGeometry';
 import { readImageFile } from './editorMedia';
+import { snapBox } from './alignGuides';
 import EditorLibrary from './EditorLibrary';
 import EditorInspector from './EditorInspector';
+import SheetShare, { Face } from './ShareSheet';
+import DocumentStudio from './DocumentStudio';
+import SlideStudio from './SlideStudio';
 import './portfolio.css';
 
 const FONTS = [
@@ -520,7 +522,17 @@ function ArrowShape({ element, accent, selected, scale, onBegin, onLive, onEnd, 
   );
 }
 
-const SceneNode = memo(function SceneNode({ element, tool, editing, selected, scale, accent, onSelect, onBegin, onLive, onEnd, onGuide, onDuplicate, setNode }) {
+function dragGroup(event) {
+  const group = event.currentTarget;
+  let node = event.target;
+  while (node && node !== group) {
+    if (typeof node.draggable === 'function' && node.draggable()) return null;
+    node = node.getParent?.();
+  }
+  return group;
+}
+
+const SceneNode = memo(function SceneNode({ element, tool, editing, selected, scale, accent, onSelect, onBegin, onLive, onEnd, onGuide, onDuplicate, onDragSession, setNode }) {
   const common = {
     id: element.id,
     x: element.x,
@@ -535,17 +547,20 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, selected, sc
       onSelect(element.id, event.evt.shiftKey);
     },
     onDragStart: (event) => {
-      if (event.target !== event.currentTarget) return;
+      const group = dragGroup(event);
+      if (!group) return;
       if (event.evt?.altKey) onDuplicate?.(element.id);
-      onBegin();
+      onDragSession?.('start', element, group);
     },
     onDragMove: (event) => {
-      if (event.target !== event.currentTarget) return;
-      onLive(element.id, { x: event.target.x(), y: event.target.y() });
+      const group = dragGroup(event);
+      if (!group) return;
+      onDragSession?.('move', element, group);
     },
     onDragEnd: (event) => {
-      if (event.target !== event.currentTarget) return;
-      onEnd();
+      const group = dragGroup(event);
+      if (!group) return;
+      onDragSession?.('end', element, group);
     },
     onTransformStart: onBegin,
     onTransformEnd: (event) => {
@@ -606,10 +621,13 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, selected, sc
           lineJoin={element.brush === 'pencil' ? 'miter' : 'round'}
           closed={Boolean(element.closed)}
           fill={element.closed ? element.fill : undefined}
-          tension={element.brush === 'pencil' ? 0 : element.brush === 'brush' ? 0.5 : ((element.points || []).length > 6 ? 0.35 : 0)}
+          tension={element.brush === 'brush' ? 0.5 : 0}
         />
       ) : element.type === 'image' ? (
-        <RemoteImage src={element.src} width={element.width} height={element.height} cornerRadius={element.radius || 0} />
+        <>
+          <Rect width={Math.max(element.width, 8)} height={Math.max(element.height, 8)} cornerRadius={element.radius || 0} fill="rgba(0,0,0,0.001)" />
+          <RemoteImage src={element.src} width={element.width} height={element.height} cornerRadius={element.radius || 0} />
+        </>
       ) : element.type === 'video' ? (
         <>
           <Rect width={element.width} height={element.height} cornerRadius={element.radius || 16} fill="#0f172a" />
@@ -622,7 +640,9 @@ const SceneNode = memo(function SceneNode({ element, tool, editing, selected, sc
           width={element.width}
           height={element.height}
           cornerRadius={cornerRadius(element) || (element.type === 'sticky' ? 8 : 0)}
-          fill={element.type === 'text' ? 'transparent' : element.fill}
+          fill={element.type === 'text' ? 'rgba(0,0,0,0.001)' : element.fill}
+          fillEnabled={!(element.type === 'frame' && (!element.fill || element.fill === 'transparent'))}
+          hitStrokeWidth={element.type === 'frame' && (!element.fill || element.fill === 'transparent') ? 18 : 0}
           stroke={element.type === 'frame' ? (element.stroke || accent) : element.stroke}
           strokeWidth={element.type === 'frame' ? (element.strokeWidth || 2) : (element.strokeWidth || 0)}
           shadowBlur={element.shadow || 0}
@@ -731,7 +751,6 @@ function TableShape({ element }) {
 const PortfolioEditorPage = () => {
   const { hojaId } = useParams();
   const { user } = useAuth();
-  const { projects } = useProjects(user?.id);
   const [state, dispatch] = useReducer(editorReducer, {
     elements: [], past: [], future: [], gesturing: false, dirty: false, epoch: 0,
   });
@@ -758,12 +777,11 @@ const PortfolioEditorPage = () => {
   const [uploads, setUploads] = useState([]);
   const [people, setPeople] = useState([]);
   const [peopleOpen, setPeopleOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [access, setAccess] = useState(null);
-  const [shareEmail, setShareEmail] = useState('');
-  const [memberQuery, setMemberQuery] = useState('');
-  const [shareNote, setShareNote] = useState('');
+  const [guides, setGuides] = useState([]);
   const [presentMode, setPresentMode] = useState('editor');
+  const [docKind, setDocKind] = useState('canvas');
+  const [studio, setStudio] = useState(null);
+  const kindRef = useRef('canvas');
   const presenting = presentMode === 'entering' || presentMode === 'presenting';
   const [frameIndex, setFrameIndex] = useState(0);
   const [player, setPlayer] = useState(null);
@@ -789,7 +807,7 @@ const PortfolioEditorPage = () => {
   const clipboardRef = useRef([]);
   const editorRef = useRef(null);
   const peopleRef = useRef(null);
-  const shareRef = useRef(null);
+  const dragRef = useRef(null);
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraMemory = useRef(null);
@@ -839,9 +857,14 @@ const PortfolioEditorPage = () => {
       try {
         const sheet = await portfolioRepository.get(hojaId, user.id);
         if (cancel) return;
-        const document = parseDocument(sheet.document);
-        dispatch({ type: 'load', elements: syncConnectors(document.elements) });
-        if (document.viewport) setCamera(document.viewport);
+        const parsed = parseDocument(sheet.document);
+        kindRef.current = parsed.kind;
+        setDocKind(parsed.kind);
+        setStudio(parsed);
+        if (parsed.kind === 'canvas') {
+          dispatch({ type: 'load', elements: syncConnectors(parsed.elements) });
+          if (parsed.viewport) setCamera(parsed.viewport);
+        }
         revisionRef.current = sheet.revision;
         setMeta(sheet);
         setName(sheet.name);
@@ -855,7 +878,7 @@ const PortfolioEditorPage = () => {
   }, [hojaId, user?.id]);
 
   useEffect(() => {
-    if (!ready || !state.dirty || !meta?.canEdit || meta.deleted) return undefined;
+    if (!ready || kindRef.current !== 'canvas' || !state.dirty || !meta?.canEdit || meta.deleted) return undefined;
     const epoch = state.epoch;
     const timer = window.setTimeout(async () => {
       if (!navigator.onLine) {
@@ -898,6 +921,7 @@ const PortfolioEditorPage = () => {
 
   useEffect(() => {
     const onKey = (event) => {
+      if (kindRef.current !== 'canvas') return;
       const typing = ['INPUT', 'TEXTAREA'].includes(event.target.tagName);
       const editingText = event.target.classList?.contains('pf-text-editor');
       if (event.code === 'Space' && !typing) {
@@ -976,6 +1000,47 @@ const PortfolioEditorPage = () => {
     const elements = syncConnectors(elementsRef.current.map((element) => (element.id === id ? { ...element, ...partial } : element)));
     elementsRef.current = elements;
     dispatch({ type: 'live', elements });
+  };
+
+  const onDragSession = (phase, element, group) => {
+    if (phase === 'start') {
+      const ids = selectionRef.current.includes(element.id) ? selectionRef.current : [element.id];
+      dragRef.current = {
+        id: element.id,
+        x: group.x(),
+        y: group.y(),
+        snapshot: elementsRef.current
+          .filter((item) => ids.includes(item.id) && !item.locked)
+          .map((item) => ({ id: item.id, x: item.x, y: item.y })),
+      };
+      dispatch({ type: 'begin' });
+      return;
+    }
+    if (phase === 'end') {
+      dragRef.current = null;
+      setGuides([]);
+      dispatch({ type: 'end' });
+      return;
+    }
+    const drag = dragRef.current;
+    if (!drag || drag.id !== element.id) return;
+    const current = elementsRef.current.find((item) => item.id === element.id) || element;
+    const proposed = elementBounds({ ...current, x: group.x(), y: group.y() });
+    const movingIds = new Set(drag.snapshot.map((item) => item.id));
+    const others = elementsRef.current
+      .filter((item) => !movingIds.has(item.id) && item.visible !== false)
+      .map((item) => elementBounds(item));
+    const snapped = snapBox(proposed, others, null, 6 / (cameraRef.current.scale || 1));
+    const x = group.x() + snapped.dx;
+    const y = group.y() + snapped.dy;
+    if (snapped.dx || snapped.dy) group.position({ x, y });
+    const dx = x - drag.x;
+    const dy = y - drag.y;
+    const moved = new Map(drag.snapshot.map((item) => [item.id, { x: item.x + dx, y: item.y + dy }]));
+    const elements = syncConnectors(elementsRef.current.map((item) => (moved.has(item.id) ? { ...item, ...moved.get(item.id) } : item)));
+    elementsRef.current = elements;
+    dispatch({ type: 'live', elements });
+    setGuides(snapped.guides);
   };
 
   const commit = (elements) => dispatch({ type: 'commit', elements: syncConnectors(elements) });
@@ -1262,7 +1327,7 @@ const PortfolioEditorPage = () => {
       const route = arrowRouteRef.current;
       const element = createElement({
         type: kind,
-        name: kind === 'ellipse' ? 'Elipse' : kind === 'line' ? 'Flecha' : kind === 'frame' ? 'Marco' : 'Rectángulo',
+        name: kind === 'ellipse' ? 'Círculo' : kind === 'line' ? 'Flecha' : kind === 'frame' ? 'Marco' : 'Rectángulo',
         x: world.x,
         y: world.y,
         width: 4,
@@ -1386,7 +1451,6 @@ const PortfolioEditorPage = () => {
   };
 
   useDismiss(peopleOpen, () => setPeopleOpen(false), peopleRef);
-  useDismiss(shareOpen, () => setShareOpen(false), shareRef);
 
   useEffect(() => {
     const syncKeys = (event) => setModifiers({ shift: event.shiftKey, alt: event.altKey });
@@ -1509,29 +1573,6 @@ const PortfolioEditorPage = () => {
   };
   stepFrameRef.current = stepFrame;
 
-  const openShare = async () => {
-    setShareOpen(true);
-    setPeopleOpen(false);
-    setShareNote('');
-    if (!meta?.canManage) return;
-    try {
-      setAccess(await portfolioRepository.access(hojaId, user.id));
-    } catch (err) {
-      setShareNote(err.message || 'No se pudo abrir el acceso.');
-    }
-  };
-
-  const changeAccess = async (patch) => {
-    try {
-      const next = await portfolioRepository.updateAccess(hojaId, { userId: user.id, ...patch });
-      setAccess(next);
-      setShareNote('');
-      if (patch.visibility) setMeta((current) => current && ({ ...current, visibility: patch.visibility }));
-    } catch (err) {
-      setShareNote(err.message || 'No se pudo actualizar el acceso.');
-    }
-  };
-
   const onPickImage = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1565,8 +1606,43 @@ const PortfolioEditorPage = () => {
   };
   const editing = state.elements.find((element) => element.id === editingId);
 
-  if (error && !ready) {
-    return <div className="pf-page p-8"><p className="pf-error font-semibold">{error}</p><Link to="/portafolio" className="ps-quiet mt-4">Volver</Link></div>;
+  if (!ready) {
+    return (
+      <div className="pf-editor">
+        <header className="pf-top">
+          <Link to="/portafolio" className="pf-icon-btn" aria-label="Volver a Portafolio"><ChevronLeft size={18} /></Link>
+          <span className={`pf-status${error ? ' is-error' : ''}`}>{error || 'Abriendo…'}</span>
+        </header>
+      </div>
+    );
+  }
+
+  if (docKind === 'document' && studio?.doc) {
+    return (
+      <DocumentStudio
+        hojaId={hojaId}
+        user={user}
+        meta={meta}
+        initialName={name}
+        revision={revisionRef.current}
+        doc={studio.doc}
+        onMeta={setMeta}
+      />
+    );
+  }
+
+  if (docKind === 'slides' && studio?.slides) {
+    return (
+      <SlideStudio
+        hojaId={hojaId}
+        user={user}
+        meta={meta}
+        initialName={name}
+        revision={revisionRef.current}
+        slides={studio.slides}
+        onMeta={setMeta}
+      />
+    );
   }
 
   return (
@@ -1602,7 +1678,7 @@ const PortfolioEditorPage = () => {
         {error && <span className="pf-error text-xs font-semibold">{error}</span>}
         <div className="pf-top-spacer" />
         <div className="pf-presence" ref={peopleRef}>
-          <button type="button" className="pf-faces" aria-label="Personas en la hoja" aria-expanded={peopleOpen} onClick={() => { setPeopleOpen((open) => !open); setShareOpen(false); }}>
+          <button type="button" className="pf-faces" aria-label="Personas en la hoja" aria-expanded={peopleOpen} onClick={() => setPeopleOpen((open) => !open)}>
             {people.slice(0, 3).map((person) => <Face key={person.id} person={person} />)}
             {people.length > 3 && <span className="pf-more">+{people.length - 3}</span>}
             {people.length === 0 && <Users size={16} />}
@@ -1619,29 +1695,7 @@ const PortfolioEditorPage = () => {
           </div>
         </div>
         <button type="button" className="pf-present" onClick={presenting ? stopPresent : startPresent}>{presenting ? 'Salir' : 'Presentar'}</button>
-        <div className="pf-share-wrap" ref={shareRef}>
-          <button type="button" className="pf-share" aria-expanded={shareOpen} onClick={() => (shareOpen ? setShareOpen(false) : openShare())}><Share2 size={15} /> Compartir</button>
-          <SharePanel
-            open={shareOpen}
-            meta={meta}
-            access={access}
-            projects={projects}
-            email={shareEmail}
-            memberQuery={memberQuery}
-            note={shareNote}
-            hojaId={hojaId}
-            onEmail={setShareEmail}
-            onMemberQuery={setMemberQuery}
-            onClose={() => setShareOpen(false)}
-            onChange={changeAccess}
-            onLinkProject={async (projectId) => {
-              const updated = await portfolioRepository.update(hojaId, { userId: user.id, projectId });
-              setMeta(updated);
-              setAccess(await portfolioRepository.access(hojaId, user.id));
-            }}
-            onNote={setShareNote}
-          />
-        </div>
+        <SheetShare hojaId={hojaId} user={user} meta={meta} onMeta={setMeta} paused={peopleOpen} />
       </header>
       <div className="pf-body">
         <EditorLibrary
@@ -1724,12 +1778,14 @@ const PortfolioEditorPage = () => {
                     onGuide={isArrow(element) ? (end) => setTipDrag({ id: element.id, end }) : undefined}
                     onEnd={(index, x, y) => (typeof index === 'number' ? finishTip(element.id, index, x, y) : dispatch({ type: 'end' }))}
                     onDuplicate={duplicateInPlace}
+                    onDragSession={onDragSession}
                     setNode={(id, node) => {
                       if (node) nodeRefs.current.set(id, node);
                       else nodeRefs.current.delete(id);
                     }}
                   />
                 ))}
+                <AlignGuides guides={guides} scale={camera.scale} />
                 {tipGuide && (
                   <ConnectionGuides
                     x={tipGuide.x}
@@ -1774,7 +1830,7 @@ const PortfolioEditorPage = () => {
             <div className="pf-shapes">
               {[
                 ['rect', 'Rectángulo'],
-                ['ellipse', 'Elipse'],
+                ['ellipse', 'Círculo'],
                 ['line', 'Flecha'],
                 ['frame', 'Marco'],
               ].map(([id, label]) => (
@@ -1882,88 +1938,33 @@ const PortfolioEditorPage = () => {
   );
 };
 
-function Face({ person }) {
-  const letter = (person.name || person.email || '?').trim().slice(0, 1).toUpperCase() || '?';
-  if (person.avatarUrl) return <img className="pf-face" src={person.avatarUrl} alt="" />;
-  return <span className="pf-face">{letter}</span>;
-}
-
-function SharePanel({
-  open, meta, access, projects, email, memberQuery, note, hojaId,
-  onEmail, onMemberQuery, onChange, onLinkProject, onNote,
-}) {
-  const members = (access?.projectMembers || []).filter((person) => {
-    const query = memberQuery.trim().toLowerCase();
-    if (!query) return true;
-    return `${person.name} ${person.email}`.toLowerCase().includes(query);
-  });
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(`${window.location.origin}/portafolio/${hojaId}`);
-      onNote('Enlace copiado.');
-    } catch {
-      onNote('No se pudo copiar el enlace.');
-    }
-  };
+function AlignGuides({ guides, scale }) {
+  const unit = 1 / (scale || 1);
+  if (!guides?.length) return null;
   return (
-    <div className={`pf-pop pf-share-pop${open ? ' is-open' : ''}`} role="dialog" aria-label="Compartir hoja">
-      <button type="button" className="ps-quiet" onClick={copyLink}>Copiar enlace</button>
-      {!meta?.canManage ? (
-        <p className="pf-kicker">Solo quien creó la hoja puede cambiar quién entra.</p>
-      ) : (
-        <>
-          <div className="pf-segment" role="radiogroup" aria-label="Visibilidad">
-            <button type="button" className={(access?.visibility || meta?.visibility) !== 'enlace' ? 'is-active' : ''} onClick={() => onChange({ visibility: 'privada' })}>Privada</button>
-            <button type="button" className={(access?.visibility || meta?.visibility) === 'enlace' ? 'is-active' : ''} onClick={() => onChange({ visibility: 'enlace' })}>Con el enlace</button>
-          </div>
-          <p className="pf-kicker">{(access?.visibility || meta?.visibility) === 'enlace' ? 'Cualquier persona con sesión y el enlace puede verla. Editar sigue siendo de invitados y del equipo elegido.' : 'Solo tú, las personas invitadas y el equipo que elijas.'}</p>
-          <form onSubmit={(event) => { event.preventDefault(); if (!email.trim()) return; onChange({ addEmail: email.trim() }); onEmail(''); }}>
-            <label>Invitar por correo
-              <span className="pf-invite">
-                <input value={email} placeholder="correo@equipo.com" onChange={(event) => onEmail(event.target.value)} />
-                <button type="submit" className="ps-quiet">Invitar</button>
-              </span>
-            </label>
-          </form>
-          {(access?.invites || []).map((person) => (
-            <div key={person.id} className="pf-person">
-              <Face person={person} />
-              <span className="min-w-0 flex-1 truncate">{person.name || person.email}</span>
-              <button type="button" className="pf-icon-btn" aria-label={`Quitar a ${person.name || person.email}`} onClick={() => onChange({ removeUserId: person.id })}><X size={14} /></button>
-            </div>
-          ))}
-          <label>Proyecto vinculado
-            <select value={meta?.projectId || ''} onChange={(event) => onLinkProject(event.target.value ? Number(event.target.value) : null)}>
-              <option value="">Sin proyecto</option>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-            </select>
-          </label>
-          {access?.projectId ? (
-            <>
-              <button type="button" className={`ps-quiet${!access.filterTeam ? ' is-active' : ''}`} onClick={() => onChange({ filterTeam: false })}>Todo el equipo</button>
-              <input value={memberQuery} placeholder="Filtrar personas del proyecto" aria-label="Filtrar personas del proyecto" onChange={(event) => onMemberQuery(event.target.value)} />
-              {members.map((person) => (
-                <label key={person.id} className="pf-check">
-                  <input
-                    type="checkbox"
-                    checked={access.filterTeam ? Boolean(person.included) : true}
-                    onChange={(event) => {
-                      const ids = (access.projectMembers || [])
-                        .filter((item) => (item.id === person.id ? event.target.checked : (access.filterTeam ? item.included : true)))
-                        .map((item) => item.id);
-                      onChange({ filterTeam: true, teamUserIds: ids });
-                    }}
-                  />
-                  <span>{person.name || person.email}</span>
-                </label>
-              ))}
-              {members.length === 0 && <p className="pf-kicker">Nadie del proyecto coincide con el filtro.</p>}
-            </>
-          ) : <p className="pf-kicker">Vincula un proyecto para elegir a quién del equipo le compartes la hoja.</p>}
-        </>
-      )}
-      {note && <p className="pf-kicker">{note}</p>}
-    </div>
+    <Group listening={false}>
+      {guides.map((guide, index) => {
+        const midX = (guide.x1 + guide.x2) / 2;
+        const midY = (guide.y1 + guide.y2) / 2;
+        const labelWidth = ((guide.label?.length || 1) * 7 + 10) * unit;
+        return (
+          <Group key={`${guide.x1}-${guide.y1}-${index}`} listening={false}>
+            <Line
+              points={[guide.x1, guide.y1, guide.x2, guide.y2]}
+              stroke="#67BFA1"
+              strokeWidth={(guide.measure ? 1 : 1.4) * unit}
+              dash={guide.measure ? [4 * unit, 3 * unit] : undefined}
+            />
+            {guide.label && (
+              <>
+                <Rect x={midX - labelWidth / 2} y={midY - 9 * unit} width={labelWidth} height={16 * unit} cornerRadius={4 * unit} fill="#e7f6f1" stroke="#67BFA1" strokeWidth={unit} />
+                <Text x={midX - labelWidth / 2} y={midY - 7 * unit} width={labelWidth} align="center" text={guide.label} fontSize={11 * unit} fontStyle="bold" fill="#1f6b52" />
+              </>
+            )}
+          </Group>
+        );
+      })}
+    </Group>
   );
 }
 
