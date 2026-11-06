@@ -10,6 +10,8 @@ import {
   isConnector,
   syncConnectors,
 } from './connectorGeometry';
+import { normalizeDocModel } from './docs/model';
+import { DOC_TEMPLATES } from './docs/docTemplates';
 
 export {
   arrowPath,
@@ -164,18 +166,7 @@ function normalizeSlides(raw) {
 }
 
 function normalizeDoc(raw) {
-  const pages = Array.isArray(raw?.pages) && raw.pages.length
-    ? raw.pages.map((page) => ({ id: page?.id || createId(), html: typeof page?.html === 'string' ? page.html : '<p><br></p>' }))
-    : [{ id: createId(), html: '<p><br></p>' }];
-  const margin = [48, 72, 96].includes(Number(raw?.margin)) ? Number(raw.margin) : 72;
-  return {
-    pageSize: raw?.pageSize === 'a4' ? 'a4' : 'letter',
-    margin,
-    header: typeof raw?.header === 'string' ? raw.header : '',
-    footer: typeof raw?.footer === 'string' ? raw.footer : '',
-    pageNumbers: raw?.pageNumbers !== false,
-    pages,
-  };
+  return normalizeDocModel(raw, createId);
 }
 
 function plainText(html) {
@@ -619,7 +610,7 @@ const TEMPLATES = [
   },
   {
     id: 'doc-proposal',
-    name: 'Propuesta',
+    name: 'Propuesta de proyecto',
     kind: 'document',
     category: 'documents',
     strip: false,
@@ -657,6 +648,7 @@ const TEMPLATES = [
       <p>Lo que esta versión no cubre.</p>
     `),
   },
+  ...DOC_TEMPLATES,
 ];
 
 const TEMPLATE_META = {

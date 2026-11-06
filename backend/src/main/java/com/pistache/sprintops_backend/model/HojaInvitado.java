@@ -28,4 +28,8 @@ public class HojaInvitado {
     /** invitado: por correo. equipo: miembro elegido del proyecto vinculado. */
     @Column(name = "origen", nullable = false, length = 20)
     private String origen;
+
+    /** editor, comentador o lector. Null equivale a editor (filas anteriores). */
+    @Column(name = "permiso", length = 20)
+    private String permiso;
 }

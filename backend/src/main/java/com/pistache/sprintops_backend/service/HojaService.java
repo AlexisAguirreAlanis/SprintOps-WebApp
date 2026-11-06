@@ -5,14 +5,17 @@ import tools.jackson.databind.ObjectMapper;
 import com.pistache.sprintops_backend.dto.HojaDTO;
 import com.pistache.sprintops_backend.model.Hoja;
 import com.pistache.sprintops_backend.model.HojaInvitado;
+import com.pistache.sprintops_backend.model.HojaVersion;
 import com.pistache.sprintops_backend.model.InfoUsuarioEquipo;
 import com.pistache.sprintops_backend.model.Proyecto;
 import com.pistache.sprintops_backend.model.Usuario;
 import com.pistache.sprintops_backend.repository.HojaInvitadoRepository;
 import com.pistache.sprintops_backend.repository.HojaRepository;
+import com.pistache.sprintops_backend.repository.HojaVersionRepository;
 import com.pistache.sprintops_backend.repository.InfoUsuarioEquipoRepository;
 import com.pistache.sprintops_backend.repository.ProyectoRepository;
 import com.pistache.sprintops_backend.repository.UsuarioRepository;
+import com.pistache.sprintops_backend.service.telegram.TelegramApiClient;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,30 +35,39 @@ public class HojaService {
 
     public static final int SCHEMA_VERSION = 1;
     public static final String EMPTY_DOCUMENT = "{\"schemaVersion\":1,\"elements\":[]}";
-    private static final int MAX_DOCUMENT_CHARS = 1_500_000;
+    private static final int MAX_DOCUMENT_CHARS = 12_000_000;
 
     private static final long PRESENCE_TTL_MS = 20_000;
+    private static final long AUTO_VERSION_MS = 10 * 60_000;
+    private static final Set<String> ROLES = Set.of("editor", "comentador", "lector");
 
     private final HojaRepository hojaRepository;
     private final HojaInvitadoRepository invitadoRepository;
+    private final HojaVersionRepository versionRepository;
     private final UsuarioRepository usuarioRepository;
     private final ProyectoRepository proyectoRepository;
     private final InfoUsuarioEquipoRepository membershipRepository;
+    private final TelegramApiClient telegram;
     private final ObjectMapper objectMapper;
     private final Map<Integer, Map<Integer, Long>> presence = new ConcurrentHashMap<>();
+    private final Map<Integer, Map<Integer, Map<String, Object>>> cursors = new ConcurrentHashMap<>();
 
     public HojaService(
             HojaRepository hojaRepository,
             HojaInvitadoRepository invitadoRepository,
+            HojaVersionRepository versionRepository,
             UsuarioRepository usuarioRepository,
             ProyectoRepository proyectoRepository,
             InfoUsuarioEquipoRepository membershipRepository,
+            TelegramApiClient telegram,
             ObjectMapper objectMapper) {
         this.hojaRepository = hojaRepository;
         this.invitadoRepository = invitadoRepository;
+        this.versionRepository = versionRepository;
         this.usuarioRepository = usuarioRepository;
         this.proyectoRepository = proyectoRepository;
         this.membershipRepository = membershipRepository;
+        this.telegram = telegram;
         this.objectMapper = objectMapper;
     }
 
@@ -144,18 +156,183 @@ public class HojaService {
     public HojaDTO saveDocument(Integer id, Integer userId, String document, long revision) {
         Usuario user = requireUser(userId);
         Hoja hoja = requireView(id, user.getIdUsuario());
-        if (!canEdit(hoja, user.getIdUsuario())) throw forbidden();
+        boolean editor = canEdit(hoja, user.getIdUsuario());
+        if (!editor && !canComment(hoja, user.getIdUsuario())) throw forbidden();
         if (hoja.isEliminada()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "La hoja está en la papelera.");
         }
         if (hoja.getRevision() != revision) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "La hoja cambió en el servidor.");
         }
-        hoja.setDocumento(validateDocument(document));
+        String next = validateDocument(document);
+        hoja.setDocumento(editor ? next : mergeComments(hoja.getDocumento(), next));
         hoja.setSchemaVersion(SCHEMA_VERSION);
         hoja.setRevision(revision + 1);
         hoja.setFechaActualizacion(Instant.now());
-        return toDto(hojaRepository.save(hoja), user.getIdUsuario(), false);
+        Hoja saved = hojaRepository.save(hoja);
+        HojaVersion last = versionRepository.findFirstByHoja_IdHojaOrderByFechaDesc(saved.getIdHoja()).orElse(null);
+        if (last == null || Instant.now().toEpochMilli() - last.getFecha().toEpochMilli() > AUTO_VERSION_MS) {
+            snapshot(saved, user, null);
+        }
+        return toDto(saved, user.getIdUsuario(), false);
+    }
+
+    /** Quien solo comenta puede cambiar únicamente doc.comments; el resto del documento se conserva. */
+    private String mergeComments(String stored, String incoming) {
+        try {
+            JsonNode base = objectMapper.readTree(stored);
+            JsonNode comments = objectMapper.readTree(incoming).path("doc").path("comments");
+            if (base.path("doc") instanceof tools.jackson.databind.node.ObjectNode doc && comments.isArray()) {
+                doc.set("comments", comments);
+                return objectMapper.writeValueAsString(base);
+            }
+        } catch (Exception ignored) {
+            // el documento guardado no es un documento de texto
+        }
+        throw forbidden();
+    }
+
+    private HojaVersion snapshot(Hoja hoja, Usuario author, String label) {
+        HojaVersion version = new HojaVersion();
+        version.setHoja(hoja);
+        version.setAutor(author);
+        version.setEtiqueta(label == null || label.isBlank() ? null : label.trim().substring(0, Math.min(120, label.trim().length())));
+        version.setRevision(hoja.getRevision());
+        version.setDocumento(hoja.getDocumento());
+        version.setFecha(Instant.now());
+        return versionRepository.save(version);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> versions(Integer id, Integer userId) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (HojaVersion version : versionRepository.findTop60ByHoja_IdHojaOrderByFechaDesc(hoja.getIdHoja())) {
+            items.add(versionItem(version, false));
+        }
+        return items;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> version(Integer id, Integer versionId, Integer userId) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        return versionItem(requireVersion(hoja, versionId), true);
+    }
+
+    @Transactional
+    public Map<String, Object> createVersion(Integer id, Integer userId, String label) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        if (!canEdit(hoja, user.getIdUsuario())) throw forbidden();
+        return versionItem(snapshot(hoja, user, label), false);
+    }
+
+    @Transactional
+    public HojaDTO restoreVersion(Integer id, Integer versionId, Integer userId) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        if (!canEdit(hoja, user.getIdUsuario())) throw forbidden();
+        HojaVersion version = requireVersion(hoja, versionId);
+        snapshot(hoja, user, "Antes de restaurar");
+        hoja.setDocumento(validateDocument(version.getDocumento()));
+        hoja.setRevision(hoja.getRevision() + 1);
+        hoja.setFechaActualizacion(Instant.now());
+        Hoja saved = hojaRepository.save(hoja);
+        snapshot(saved, user, "Restaurada desde " + version.getFecha());
+        return toDto(saved, user.getIdUsuario(), true);
+    }
+
+    private HojaVersion requireVersion(Hoja hoja, Integer versionId) {
+        HojaVersion version = versionRepository.findById(versionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Versión no encontrada."));
+        if (!version.getHoja().getIdHoja().equals(hoja.getIdHoja())) throw forbidden();
+        return version;
+    }
+
+    private Map<String, Object> versionItem(HojaVersion version, boolean includeDocument) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", version.getIdVersion());
+        item.put("label", version.getEtiqueta());
+        item.put("revision", version.getRevision());
+        item.put("createdAt", version.getFecha().toString());
+        item.put("authorId", version.getAutor() == null ? null : version.getAutor().getIdUsuario());
+        item.put("authorName", version.getAutor() == null ? "" : version.getAutor().getNombreUsuario());
+        item.put("size", version.getDocumento() == null ? 0 : version.getDocumento().length());
+        if (includeDocument) item.put("document", version.getDocumento());
+        return item;
+    }
+
+    /** Búsqueda de texto plano dentro de los documentos que la persona puede ver. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> search(Integer userId, String query) {
+        String needle = query == null ? "" : query.trim().toLowerCase();
+        List<Map<String, Object>> results = new ArrayList<>();
+        if (needle.length() < 2) return results;
+        for (HojaDTO dto : list(userId)) {
+            if (dto.deleted || results.size() >= 30) continue;
+            Hoja hoja = hojaRepository.findById(dto.id).orElse(null);
+            if (hoja == null) continue;
+            String text = plainText(hoja.getDocumento());
+            int at = text.toLowerCase().indexOf(needle);
+            boolean nameHit = dto.name != null && dto.name.toLowerCase().contains(needle);
+            if (at < 0 && !nameHit) continue;
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", dto.id);
+            item.put("name", dto.name);
+            item.put("updatedAt", dto.updatedAt);
+            int from = Math.max(0, at - 80);
+            item.put("snippet", at < 0 ? text.substring(0, Math.min(160, text.length())) : text.substring(from, Math.min(text.length(), at + needle.length() + 120)));
+            item.put("text", text.substring(0, Math.min(6000, text.length())));
+            results.add(item);
+        }
+        return results;
+    }
+
+    @Transactional(readOnly = true)
+    public String plainTextFor(Integer id, Integer userId) {
+        Usuario user = requireUser(userId);
+        return plainText(requireView(id, user.getIdUsuario()).getDocumento());
+    }
+
+    private String plainText(String document) {
+        if (document == null || document.isBlank()) return "";
+        try {
+            JsonNode root = objectMapper.readTree(document);
+            StringBuilder builder = new StringBuilder();
+            JsonNode pages = root.path("doc").path("pages");
+            if (pages.isArray()) {
+                for (JsonNode page : pages) builder.append(' ').append(page.path("html").asText(""));
+            } else {
+                for (JsonNode el : root.path("elements")) builder.append(' ').append(el.path("text").asText(""));
+            }
+            return builder.toString()
+                    .replaceAll("(?i)</(p|h[1-6]|li|tr|div|blockquote)>", "\n")
+                    .replaceAll("<[^>]+>", " ")
+                    .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                    .replaceAll("[ \\t]+", " ").replaceAll("\\n\\s*", "\n").trim();
+        } catch (Exception ex) {
+            return "";
+        }
+    }
+
+    /** Notifica por Telegram a quien fue mencionado con @ en un comentario. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> notifyMentions(Integer id, Integer userId, List<Integer> mentionedIds, String text) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        if (!canComment(hoja, user.getIdUsuario())) throw forbidden();
+        int sent = 0;
+        for (Integer mentionedId : mentionedIds) {
+            Usuario mentioned = usuarioRepository.findById(mentionedId).orElse(null);
+            if (mentioned == null || role(hoja, mentionedId) == null || mentioned.getTelegramUserId() == null || !telegram.isConfigured()) continue;
+            String snippet = text == null ? "" : text.substring(0, Math.min(400, text.length()));
+            telegram.sendMessage(mentioned.getTelegramUserId(),
+                    user.getNombreUsuario() + " te mencionó en «" + hoja.getNombre() + "»:\n" + snippet);
+            sent++;
+        }
+        return Map.of("sent", sent);
     }
 
     @Transactional
@@ -187,15 +364,28 @@ public class HojaService {
         return hoja;
     }
 
+    /** propietario, editor, comentador o lector; null si no puede entrar. */
+    private String role(Hoja hoja, Integer userId) {
+        if (isOwner(hoja, userId)) return "propietario";
+        HojaInvitado invite = invitadoRepository
+                .findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), userId, "invitado")
+                .orElse(null);
+        if (invite != null) return invite.getPermiso() == null ? "editor" : invite.getPermiso();
+        if (teamCanEnter(hoja, userId)) return "editor";
+        return "enlace".equals(visibility(hoja)) ? "lector" : null;
+    }
+
     private boolean canView(Hoja hoja, Integer userId) {
-        if (isOwner(hoja, userId) || isInvited(hoja, userId)) return true;
-        if ("enlace".equals(visibility(hoja))) return true;
-        return teamCanEnter(hoja, userId);
+        return role(hoja, userId) != null;
     }
 
     private boolean canEdit(Hoja hoja, Integer userId) {
-        if (isOwner(hoja, userId) || isInvited(hoja, userId)) return true;
-        return teamCanEnter(hoja, userId);
+        String role = role(hoja, userId);
+        return "propietario".equals(role) || "editor".equals(role);
+    }
+
+    private boolean canComment(Hoja hoja, Integer userId) {
+        return canEdit(hoja, userId) || "comentador".equals(role(hoja, userId));
     }
 
     private boolean teamCanEnter(Hoja hoja, Integer userId) {
@@ -203,12 +393,6 @@ public class HojaService {
         if (!Boolean.TRUE.equals(hoja.getFiltrarEquipo())) return true;
         return invitadoRepository
                 .findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), userId, "equipo")
-                .isPresent();
-    }
-
-    private boolean isInvited(Hoja hoja, Integer userId) {
-        return invitadoRepository
-                .findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), userId, "invitado")
                 .isPresent();
     }
 
@@ -301,7 +485,9 @@ public class HojaService {
         dto.shared = dto.ownerId != null && !dto.ownerId.equals(userId);
         dto.team = dto.projectId != null;
         dto.canManage = dto.ownerId != null && dto.ownerId.equals(userId);
-        dto.canEdit = canEdit(hoja, userId);
+        dto.role = role(hoja, userId);
+        dto.canEdit = "propietario".equals(dto.role) || "editor".equals(dto.role);
+        dto.canComment = dto.canEdit || "comentador".equals(dto.role);
         dto.visibility = visibility(hoja);
         dto.filterTeam = Boolean.TRUE.equals(hoja.getFiltrarEquipo());
         dto.revision = hoja.getRevision();
@@ -437,7 +623,11 @@ public class HojaService {
         for (HojaInvitado row : rows) {
             if (row.getUsuario() == null) continue;
             if ("equipo".equals(row.getOrigen())) teamGrants.add(row.getUsuario().getIdUsuario());
-            if ("invitado".equals(row.getOrigen())) invites.add(person(row.getUsuario()));
+            if ("invitado".equals(row.getOrigen())) {
+                Map<String, Object> item = person(row.getUsuario());
+                item.put("role", row.getPermiso() == null ? "editor" : row.getPermiso());
+                invites.add(item);
+            }
         }
         body.put("invites", invites);
         body.put("projectMembers", projectPeople(hoja, teamGrants));
@@ -452,7 +642,10 @@ public class HojaService {
             Boolean filterTeam,
             List<Integer> teamUserIds,
             String addEmail,
-            Integer removeUserId) {
+            String addRole,
+            Integer removeUserId,
+            Integer roleUserId,
+            String role) {
         Usuario user = requireUser(userId);
         Hoja hoja = requireView(id, user.getIdUsuario());
         if (!isOwner(hoja, user.getIdUsuario())) throw forbidden();
@@ -498,8 +691,16 @@ public class HojaService {
                 row.setHoja(hoja);
                 row.setUsuario(invited);
                 row.setOrigen("invitado");
+                row.setPermiso(ROLES.contains(addRole) ? addRole : "editor");
                 invitadoRepository.save(row);
             }
+        }
+        if (roleUserId != null && ROLES.contains(role)) {
+            invitadoRepository.findByHoja_IdHojaAndUsuario_IdUsuarioAndOrigen(hoja.getIdHoja(), roleUserId, "invitado")
+                    .ifPresent(row -> {
+                        row.setPermiso(role);
+                        invitadoRepository.save(row);
+                    });
         }
         hoja.setFechaActualizacion(Instant.now());
         hojaRepository.save(hoja);
@@ -507,18 +708,35 @@ public class HojaService {
         return access(id, userId);
     }
 
-    public List<Map<String, Object>> pulse(Integer id, Integer userId) {
+    public List<Map<String, Object>> pulse(Integer id, Integer userId, Map<String, Object> cursor) {
         Usuario user = requireUser(userId);
         requireView(id, user.getIdUsuario());
         long now = System.currentTimeMillis();
         Map<Integer, Long> room = presence.computeIfAbsent(id, key -> new ConcurrentHashMap<>());
+        Map<Integer, Map<String, Object>> roomCursors = cursors.computeIfAbsent(id, key -> new ConcurrentHashMap<>());
         room.put(user.getIdUsuario(), now);
+        if (cursor != null) roomCursors.put(user.getIdUsuario(), cursor);
         room.entrySet().removeIf(entry -> now - entry.getValue() > PRESENCE_TTL_MS);
+        roomCursors.keySet().removeIf(key -> !room.containsKey(key));
         List<Map<String, Object>> people = new ArrayList<>();
         for (Integer presentId : room.keySet()) {
-            usuarioRepository.findById(presentId).ifPresent(present -> people.add(person(present)));
+            usuarioRepository.findById(presentId).ifPresent(present -> {
+                Map<String, Object> item = person(present);
+                if (roomCursors.containsKey(presentId)) item.put("cursor", roomCursors.get(presentId));
+                people.add(item);
+            });
         }
         return people;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> revision(Integer id, Integer userId) {
+        Usuario user = requireUser(userId);
+        Hoja hoja = requireView(id, user.getIdUsuario());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("revision", hoja.getRevision());
+        body.put("updatedAt", hoja.getFechaActualizacion() == null ? null : hoja.getFechaActualizacion().toString());
+        return body;
     }
 
     private List<Map<String, Object>> projectPeople(Hoja hoja, Set<Integer> teamGrants) {
