@@ -4,6 +4,7 @@ import {
   Redo2, Replace, Scissors, Search, SquareDashed, Strikethrough, Subscript, Superscript, Type, Underline, Undo2, WandSparkles, Navigation,
   TextSelect, ScanText, BetweenHorizontalStart,
 } from 'lucide-react';
+import { useLayoutEffect, useRef } from 'react';
 import { Btn, ColorGrid, FontField, Group, Item, Menu, Row, Select, Sep } from '../ui/controls';
 export { FONTS } from '../fonts';
 
@@ -27,8 +28,104 @@ export const NAMED_STYLES = [
   { id: 'code', label: 'Código', tag: 'PRE', cls: 'wd-code' },
 ];
 
+function BorderMark({ kind }) {
+  const ink = '#1e293b';
+  const dots = [];
+  const interior = kind === 'grid';
+  const frame = !['all', 'outer', 'rule', 'draw'].includes(kind);
+  if (frame) {
+    for (let row = 0; row < 4; row += 1) {
+      for (let col = 0; col < 4; col += 1) {
+        if (!interior && row !== 0 && row !== 3 && col !== 0 && col !== 3) continue;
+        dots.push(<circle key={`${row}-${col}`} cx={2 + col * 4} cy={2 + row * 4} r="0.65" fill="#b7c0cb" />);
+      }
+    }
+  }
+  return (
+    <svg className="wd-edge" viewBox="0 0 16 16" aria-hidden="true">
+      {dots}
+      {(kind === 'all' || kind === 'outer') && <rect x="1.5" y="1.5" width="13" height="13" fill="none" stroke={ink} strokeWidth="1.35" />}
+      {kind === 'all' && <path d="M8 1.5V14.5M1.5 8H14.5" stroke={ink} strokeWidth="1.15" />}
+      {kind === 'inner' && <path d="M8 2.2V13.8M2.2 8H13.8" stroke={ink} strokeWidth="1.25" />}
+      {kind === 'horizontal' && <path d="M2 8H14" stroke={ink} strokeWidth="1.35" />}
+      {kind === 'vertical' && <path d="M8 2V14" stroke={ink} strokeWidth="1.35" />}
+      {kind === 'diagDown' && <path d="M2.4 2.4L13.6 13.6" stroke={ink} strokeWidth="1.25" />}
+      {kind === 'diagUp' && <path d="M2.4 13.6L13.6 2.4" stroke={ink} strokeWidth="1.25" />}
+      {kind === 'bottom' && <path d="M1.2 14.2H14.8" stroke={ink} strokeWidth="1.7" />}
+      {kind === 'top' && <path d="M1.2 1.8H14.8" stroke={ink} strokeWidth="1.7" />}
+      {kind === 'left' && <path d="M1.8 1.2V14.8" stroke={ink} strokeWidth="1.7" />}
+      {kind === 'right' && <path d="M14.2 1.2V14.8" stroke={ink} strokeWidth="1.7" />}
+      {kind === 'rule' && <path d="M1 8H15" stroke={ink} strokeWidth="1.6" />}
+      {kind === 'draw' && <path d="M3.2 12.8L10.2 2.6l2.2 1.6-7 10.2-2.6.6.4-2.2z" fill="none" stroke={ink} strokeWidth="1.1" strokeLinejoin="round" />}
+    </svg>
+  );
+}
+
 const Bar = () => <span className="wd-vbar" aria-hidden="true" />;
 const RIBBON_STYLES = ['normal', 'nospacing', 'h1', 'h2', 'title', 'subtitle'];
+
+function stylePreview(id, theme) {
+  const head = theme?.fonts?.heading || 'inherit';
+  const body = theme?.fonts?.body || 'inherit';
+  const heading = theme?.colors?.heading || '#1f4e43';
+  const text = theme?.colors?.text || '#1e293b';
+  const muted = theme?.colors?.muted || '#64748b';
+  const accent = theme?.colors?.primary || '#2f6f5e';
+  const base = { fontFamily: body, color: text, fontWeight: 400, fontStyle: 'normal', fontSize: 13, letterSpacing: 0, textDecoration: 'none' };
+  const titled = { ...base, fontFamily: head, color: heading };
+  const looks = {
+    normal: base,
+    nospacing: base,
+    title: { ...titled, fontSize: 22, fontWeight: 500 },
+    subtitle: { ...base, color: muted, fontSize: 15 },
+    h1: { ...titled, fontSize: 18, fontWeight: 700 },
+    h2: { ...titled, fontSize: 16, fontWeight: 700 },
+    h3: { ...titled, fontSize: 15, fontWeight: 650 },
+    h4: { ...titled, fontSize: 14, fontWeight: 650 },
+    h5: { ...base, fontSize: 13, fontWeight: 650 },
+    h6: { ...base, fontSize: 12, fontWeight: 650, color: muted },
+    quote: { ...base, fontStyle: 'italic', color: muted },
+    intense: { ...titled, fontSize: 14, fontWeight: 650, textDecoration: 'underline', textDecorationColor: accent, textUnderlineOffset: '3px' },
+    emphasis: { ...base, fontStyle: 'italic', fontSize: 15 },
+    strong: { ...titled, fontWeight: 800, fontSize: 15 },
+    code: { ...base, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 },
+  };
+  return looks[id] || base;
+}
+
+function StyleGallery({ styles, activeId, onPick }) {
+  const gallery = useRef(null);
+  useLayoutEffect(() => {
+    const el = gallery.current;
+    if (!el) return undefined;
+    const fit = () => {
+      const chips = [...el.children];
+      chips.forEach((chip) => { chip.hidden = false; });
+      const limit = el.getBoundingClientRect().right;
+      let cut = false;
+      chips.forEach((chip) => {
+        const box = chip.getBoundingClientRect();
+        if (cut || box.width < 1 || box.right > limit + 1) {
+          chip.hidden = true;
+          cut = true;
+        }
+      });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [styles]);
+  return (
+    <div className="wd-style-gallery" ref={gallery} role="listbox" aria-label="Estilos">
+      {styles.map((style) => (
+        <button key={style.id} type="button" role="option" aria-selected={activeId === style.id} className={`wd-style-chip wd-chip-${style.id}${activeId === style.id ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => onPick(style)}>
+          {style.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 const UNDERLINES = [['solid', '1px'], ['double', '3px'], ['dotted', '2px'], ['dashed', '2px'], ['wavy', '2px']];
 const TEXT_LOOKS = [
   { name: 'Sombra', preview: { textShadow: '2px 2px 0 #67bfa1' }, apply: { textShadow: '2px 2px 3px rgba(15,23,42,.35)' } },
@@ -117,8 +214,8 @@ export default function HomeTab({ api, sel }) {
           <Btn className="wd-extra" icon={Subscript} label="Subíndice (⌘,)" active={sel.sub} onClick={() => api.cmd('subscript')} />
           <Btn className="wd-extra" icon={Superscript} label="Superíndice (⌘.)" active={sel.sup} onClick={() => api.cmd('superscript')} />
           <Bar />
-          <Menu icon={Baseline} label="Color de fuente" width={248}>{(close) => <ColorGrid value={sel.color} recent={api.recentColors} onPick={(color) => api.inline({ color })} close={close} />}</Menu>
-          <Menu icon={Highlighter} label="Color de resaltado" width={196}>{(close) => <ColorGrid kind="highlight" allowNone noneLabel="Sin color" onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
+          <Menu icon={Baseline} label="Color de fuente" mark={sel.color} width={202}>{(close) => <ColorGrid value={sel.color} recent={api.recentColors} onPick={(color) => api.inline({ color })} close={close} />}</Menu>
+          <Menu icon={Highlighter} label="Color de resaltado" mark={sel.highlight} width={196}>{(close) => <ColorGrid kind="highlight" allowNone noneLabel="Sin color" onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
           <Menu icon={WandSparkles} label="Efectos de texto" width={230}>
             {(close) => (
               <>
@@ -208,15 +305,42 @@ export default function HomeTab({ api, sel }) {
               </>
             )}
           </Menu>
-          <Menu icon={PaintBucket} label="Sombreado del párrafo" width={220}>{(close) => <ColorGrid allowNone onPick={(color) => api.block({ backgroundColor: color || '' , padding: color ? '4px 8px' : '' })} close={close} />}</Menu>
-          <Menu icon={SquareDashed} label="Bordes del párrafo" width={220}>
+          <Menu icon={PaintBucket} label="Sombreado del párrafo" mark={sel.shade} width={202}>{(close) => <ColorGrid allowNone onPick={(color) => api.block({ backgroundColor: color || '' , padding: color ? '4px 8px' : '' })} close={close} />}</Menu>
+          <Menu icon={SquareDashed} label="Bordes del párrafo" width={236} limit={440} scroll>
             {(close) => (
               <>
-                <Item label="Borde inferior" close={close} onClick={() => api.block({ borderBottom: '1.5px solid currentColor', paddingBottom: '4px' })} />
-                <Item label="Borde superior" close={close} onClick={() => api.block({ borderTop: '1.5px solid currentColor', paddingTop: '4px' })} />
-                <Item label="Borde izquierdo" close={close} onClick={() => api.block({ borderLeft: '3px solid currentColor', paddingLeft: '10px' })} />
-                <Item label="Todos los bordes" close={close} onClick={() => api.block({ border: '1.5px solid currentColor', padding: '6px 10px' })} />
-                <Item label="Sin borde" close={close} onClick={() => api.block({ border: 'none', borderTop: '', borderBottom: '', borderLeft: '', padding: '' })} />
+                {[
+                  ['bottom', 'Borde inferior'], ['top', 'Borde superior'], ['left', 'Borde izquierdo'], ['right', 'Borde derecho'],
+                ].map(([kind, label]) => (
+                  <Item key={kind} close={close} onClick={() => api.run('borderEdge', kind)}>
+                    <span className="wd-border-choice"><BorderMark kind={kind} />{label}</span>
+                  </Item>
+                ))}
+                <Sep />
+                {[
+                  ['none', 'Sin borde'], ['all', 'Todos los bordes'], ['outer', 'Bordes externos'], ['inner', 'Bordes internos'],
+                ].map(([kind, label]) => (
+                  <Item key={kind} close={close} onClick={() => api.run('borderEdge', kind)}>
+                    <span className="wd-border-choice"><BorderMark kind={kind} />{label}</span>
+                  </Item>
+                ))}
+                <Sep />
+                {[
+                  ['horizontal', 'Borde horizontal interno'], ['vertical', 'Borde vertical interno'],
+                  ['diagDown', 'Borde diagonal descendente'], ['diagUp', 'Borde diagonal ascendente'],
+                ].map(([kind, label]) => (
+                  <Item key={kind} close={close} onClick={() => api.run('borderEdge', kind)}>
+                    <span className="wd-border-choice"><BorderMark kind={kind} />{label}</span>
+                  </Item>
+                ))}
+                <Sep />
+                {[
+                  ['rule', 'Línea horizontal'], ['draw', 'Dibujar tabla'], ['grid', 'Ver cuadrículas'],
+                ].map(([kind, label]) => (
+                  <Item key={kind} close={close} onClick={() => api.run('borderEdge', kind)}>
+                    <span className="wd-border-choice"><BorderMark kind={kind} />{label}</span>
+                  </Item>
+                ))}
                 <Sep />
                 <Item label="Bordes y sombreado…" close={close} onClick={() => api.run('bordersDialog')} />
               </>
@@ -228,20 +352,14 @@ export default function HomeTab({ api, sel }) {
 
       <Group label="Estilos" grow>
         <div className="wd-style-row">
-          <div className="wd-style-gallery" role="listbox" aria-label="Estilos">
-            {RIBBON_STYLES.map((id) => styles.find((style) => style.id === id)).filter(Boolean).map((style) => (
-              <button key={style.id} type="button" role="option" aria-selected={sel.styleId === style.id} className={`wd-style-chip wd-chip-${style.id}${sel.styleId === style.id ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => api.setTag(style.tag, style.cls || '')}>
-                {style.label}
-              </button>
-            ))}
-          </div>
-          <Menu icon={Type} label="Estilos" width={280}>
+          <StyleGallery styles={RIBBON_STYLES.map((id) => styles.find((style) => style.id === id)).filter(Boolean)} activeId={sel.styleId} onPick={(style) => api.setTag(style.tag, style.cls || '')} />
+          <Menu icon={Type} label="Estilos" width={340} limit={440}>
             {(close) => (
               <>
                 <div className="wd-style-menu">
                   {styles.map((style) => (
-                    <button key={style.id} type="button" className={`wd-style-tile wd-chip-${style.id}${sel.styleId === style.id ? ' is-active' : ''}`} onClick={() => { api.setTag(style.tag, style.cls || ''); close(); }}>
-                      {style.label}
+                    <button key={style.id} type="button" className={`wd-style-tile${sel.styleId === style.id ? ' is-active' : ''}`} onClick={() => { api.setTag(style.tag, style.cls || ''); close(); }}>
+                      <span style={stylePreview(style.id, api.doc.theme)}>{style.label}</span>
                     </button>
                   ))}
                 </div>

@@ -4,7 +4,7 @@ import { Bold, Highlighter, Italic, Palette, Strikethrough, Underline } from 'lu
 import { applyTransform } from '../engine/objects';
 import { holdSelection } from '../engine/core';
 import { SIZES } from '../ribbon/HomeTab';
-import { Btn, ColorGrid, FontField, Menu, Select } from './controls';
+import { Btn, ColorGrid, FontField, Menu, ScrollPane, Select } from './controls';
 
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -103,21 +103,36 @@ export function ObjectHandles({ el, deskEl, zoom, version, onChange, onCommit })
   );
 }
 
-/** Barra flotante sobre el texto seleccionado. */
+/** Barra flotante junto al texto seleccionado, sin taparlo ni montarse en la cinta. */
 export function BubbleBar({ rect, sel, api }) {
+  const barRef = useRef(null);
+  const [size, setSize] = useState({ width: 430, height: 40 });
+  useLayoutEffect(() => {
+    const box = barRef.current?.getBoundingClientRect();
+    if (!box) return;
+    const width = Math.ceil(box.width);
+    const height = Math.ceil(box.height);
+    if (width !== size.width || height !== size.height) setSize({ width, height });
+  });
   if (!rect) return null;
-  const top = Math.max(8, rect.top - 48);
-  const left = Math.min(window.innerWidth - 440, Math.max(8, rect.left));
+  const gap = 8;
+  const ribbonBottom = document.querySelector('.wd-ribbon-wrap')?.getBoundingClientRect().bottom ?? 0;
+  const above = rect.top - gap - size.height;
+  const below = rect.bottom + gap;
+  const roomAbove = above >= ribbonBottom + 6;
+  const roomBelow = below + size.height <= window.innerHeight - 28;
+  const top = roomAbove ? above : roomBelow ? below : Math.max(ribbonBottom + 6, window.innerHeight - size.height - 12);
+  const left = Math.min(window.innerWidth - size.width - 12, Math.max(12, rect.left + rect.width / 2 - size.width / 2));
   return createPortal(
-    <div className="wd-bubble" style={{ top, left }} role="toolbar" aria-label="Formato rápido" onMouseDown={(event) => { if (event.target.closest('input, textarea')) { holdSelection(document.querySelector('.wd-desk')); return; } event.preventDefault(); }}>
+    <div ref={barRef} className="wd-bubble" style={{ top, left }} role="toolbar" aria-label="Formato rápido" onMouseDown={(event) => { if (event.target.closest('input, textarea')) { holdSelection(document.querySelector('.wd-desk')); return; } event.preventDefault(); }}>
       <FontField value={sel.font || ''} onChange={(value) => value && api.inline({ fontFamily: value })} />
       <Select className="is-size" label="Tamaño" width={58} value={String(sel.size || '')} options={[['', sel.size ? String(sel.size) : '—'], ...SIZES.map((size) => [String(size), String(size)])]} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
       <Btn icon={Bold} label="Negrita" active={sel.bold} onClick={() => api.cmd('bold')} />
       <Btn icon={Italic} label="Cursiva" active={sel.italic} onClick={() => api.cmd('italic')} />
       <Btn icon={Underline} label="Subrayado" active={sel.underline} onClick={() => api.cmd('underline')} />
       <Btn icon={Strikethrough} label="Tachado" active={sel.strike} onClick={() => api.cmd('strikeThrough')} />
-      <Menu icon={Palette} label="Color de texto" width={248}>{(close) => <ColorGrid value={sel.color} onPick={(color) => api.inline({ color })} close={close} />}</Menu>
-      <Menu icon={Highlighter} label="Resaltado" width={196}>{(close) => <ColorGrid kind="highlight" allowNone noneLabel="Sin color" onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
+      <Menu icon={Palette} label="Color de texto" mark={sel.color} width={202}>{(close) => <ColorGrid value={sel.color} onPick={(color) => api.inline({ color })} close={close} />}</Menu>
+      <Menu icon={Highlighter} label="Resaltado" mark={sel.highlight} width={196}>{(close) => <ColorGrid kind="highlight" allowNone noneLabel="Sin color" onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
     </div>,
     document.body,
   );
@@ -138,17 +153,20 @@ export function ContextMenu({ menu, onClose }) {
     };
   }, [menu, onClose]);
   if (!menu) return null;
-  const top = Math.min(menu.y, window.innerHeight - menu.items.length * 32 - 16);
+  const maxHeight = Math.max(120, window.innerHeight - 24);
+  const top = Math.max(12, Math.min(menu.y, window.innerHeight - Math.min(maxHeight, menu.items.length * 32 + 16) - 12));
   const left = Math.min(menu.x, window.innerWidth - 248);
   return createPortal(
-    <div ref={ref} className="wd-pop wd-context" role="menu" style={{ top, left, width: 240 }} onMouseDown={(event) => event.preventDefault()}>
-      {menu.items.map((item, index) => (item === '-' ? <div key={index} className="wd-sep" /> : (
-        <button key={item.label} type="button" role="menuitem" className="wd-item" disabled={item.disabled} onClick={() => { onClose(); item.run(); }}>
-          {item.icon ? <item.icon size={15} /> : <span className="wd-item-gap" />}
-          <span className="wd-item-label">{item.label}</span>
-          {item.hint && <kbd>{item.hint}</kbd>}
-        </button>
-      )))}
+    <div ref={ref} className="wd-pop wd-context is-clamped" role="menu" style={{ top, left, width: 240, maxHeight: Math.min(maxHeight, window.innerHeight - top - 12) }} onMouseDown={(event) => event.preventDefault()}>
+      <ScrollPane maxHeight={Math.max(96, Math.min(maxHeight, window.innerHeight - top - 20))}>
+        {menu.items.map((item, index) => (item === '-' ? <div key={index} className="wd-sep" /> : (
+          <button key={item.label} type="button" role="menuitem" className="wd-item" disabled={item.disabled} onClick={() => { onClose(); item.run(); }}>
+            {item.icon ? <item.icon size={15} /> : <span className="wd-item-gap" />}
+            <span className="wd-item-label">{item.label}</span>
+            {item.hint && <kbd>{item.hint}</kbd>}
+          </button>
+        )))}
+      </ScrollPane>
     </div>,
     document.body,
   );
@@ -161,10 +179,13 @@ export function InlineMenu({ menu, items, active, onPick, onHover }) {
     listRef.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' });
   }, [active]);
   if (!menu) return null;
-  const top = Math.min(menu.rect.bottom + 6, window.innerHeight - 320);
+  const room = Math.max(140, window.innerHeight - menu.rect.bottom - 16);
+  const maxHeight = Math.min(310, room);
+  const top = menu.rect.bottom + 6;
   const left = Math.min(menu.rect.left, window.innerWidth - 300);
   return createPortal(
-    <div className="wd-pop wd-inline-menu" role="listbox" style={{ top, left, width: 290, maxHeight: 310 }} ref={listRef} onMouseDown={(event) => event.preventDefault()}>
+    <div className="wd-pop wd-inline-menu is-clamped" role="listbox" style={{ top, left, width: 290, maxHeight }} ref={listRef} onMouseDown={(event) => event.preventDefault()}>
+      <ScrollPane maxHeight={Math.max(100, maxHeight - 8)}>
       <div className="wd-sep-label">{menu.trigger === '/' ? 'Insertar bloque' : 'Mencionar'}{menu.query ? ` · “${menu.query}”` : ''}</div>
       {items.length === 0 && <p className="wd-muted wd-pad">Sin resultados</p>}
       {items.map((item, index) => (
@@ -173,6 +194,7 @@ export function InlineMenu({ menu, items, active, onPick, onHover }) {
           <span className="wd-item-label"><b>{item.label}</b><small>{item.hint}</small></span>
         </button>
       ))}
+      </ScrollPane>
     </div>,
     document.body,
   );

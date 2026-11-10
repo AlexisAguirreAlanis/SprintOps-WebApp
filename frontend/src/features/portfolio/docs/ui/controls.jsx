@@ -2,14 +2,22 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import { FONTS } from '../fonts';
+import { ColorGrid } from './colorPicker';
+
+export { ColorGrid };
 import { holdSelection } from '../engine/core';
 
 const keepFocus = (event) => event.preventDefault();
 
-function ScrollPane({ children }) {
+export function ScrollPane({ children, maxHeight }) {
   const body = useRef(null);
   const drag = useRef(null);
+  const edge = useRef(false);
+  const hideTimer = useRef(0);
   const [metrics, setMetrics] = useState({ shown: false, top: 0, height: 28 });
+  const [live, setLive] = useState(false);
+  const [hot, setHot] = useState(false);
+  const [grabbing, setGrabbing] = useState(false);
 
   const measure = useCallback(() => {
     const el = body.current;
@@ -26,13 +34,30 @@ function ScrollPane({ children }) {
     ));
   }, []);
 
+  const armHide = useCallback(() => {
+    window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => {
+      if (edge.current || drag.current) return;
+      setLive(false);
+      setHot(false);
+    }, 700);
+  }, []);
+
+  const reveal = useCallback(() => {
+    setLive(true);
+    armHide();
+  }, [armHide]);
+
   useLayoutEffect(() => {
     measure();
     const el = body.current;
     if (!el) return undefined;
     const observer = new ResizeObserver(measure);
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(hideTimer.current);
+    };
   }, [measure, children]);
 
   const onThumbDown = (event) => {
@@ -41,6 +66,9 @@ function ScrollPane({ children }) {
     const el = body.current;
     if (!el) return;
     drag.current = { y: event.clientY, scroll: el.scrollTop };
+    setGrabbing(true);
+    setLive(true);
+    window.clearTimeout(hideTimer.current);
     const move = (ev) => {
       const view = el.clientHeight;
       const thumb = Math.max(28, Math.min(view - 6, (view / el.scrollHeight) * view));
@@ -49,8 +77,10 @@ function ScrollPane({ children }) {
     };
     const up = () => {
       drag.current = null;
+      setGrabbing(false);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      armHide();
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -63,16 +93,34 @@ function ScrollPane({ children }) {
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = (event.clientY - rect.top) / rect.height;
     el.scrollTop = ratio * el.scrollHeight - el.clientHeight / 2;
+    reveal();
+  };
+
+  const onPaneMove = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const near = event.clientX >= rect.right - 18;
+    edge.current = near;
+    if (near) reveal();
   };
 
   return (
-    <div className="wd-scrollpane">
-      <div ref={body} className="wd-scrollpane-body" data-hide-scrollbar onScroll={measure}>
+    <div
+      className={`wd-scrollpane${live ? ' is-on' : ''}${hot ? ' is-hot' : ''}${grabbing ? ' is-drag' : ''}`}
+      style={maxHeight ? { maxHeight } : undefined}
+      onPointerMove={onPaneMove}
+      onPointerLeave={() => { edge.current = false; armHide(); }}
+    >
+      <div ref={body} className="wd-scrollpane-body" style={{ maxHeight: maxHeight || undefined, paddingRight: metrics.shown ? 14 : 0 }} data-hide-scrollbar onScroll={() => { measure(); reveal(); }}>
         {children}
       </div>
       {metrics.shown && (
         <div className="wd-scrollpane-track" onMouseDown={onTrackDown}>
-          <span style={{ height: metrics.height, transform: `translateY(${metrics.top}px)` }} onPointerDown={onThumbDown} />
+          <span
+            style={{ height: metrics.height, transform: `translateY(${metrics.top}px)` }}
+            onPointerDown={onThumbDown}
+            onPointerEnter={() => setHot(true)}
+            onPointerLeave={() => { if (!drag.current) setHot(false); }}
+          />
         </div>
       )}
     </div>
@@ -112,7 +160,7 @@ export function Row({ children }) {
 }
 
 /** Menú desplegable que se pinta en un portal para no recortarse dentro de la cinta. */
-export function Menu({ icon: Icon, label, text, children, wide = false, active = false, width = 240, limit = 360, menuClass = '', scroll = false, disabled = false, title }) {
+export function Menu({ icon: Icon, label, text, children, wide = false, active = false, width = 240, limit = 360, menuClass = '', scroll = false, disabled = false, title, mark = '' }) {
   const [open, setOpen] = useState(false);
   const [alive, setAlive] = useState(false);
   const [pos, setPos] = useState(null);
@@ -132,17 +180,26 @@ export function Menu({ icon: Icon, label, text, children, wide = false, active =
 
   useLayoutEffect(() => {
     if (!open || !anchor.current) return undefined;
-    const rect = anchor.current.getBoundingClientRect();
-    const below = window.innerHeight - rect.bottom - 10;
-    const above = rect.top - 10;
-    const up = below < Math.min(limit, 200) && above > below;
-    const maxHeight = Math.max(120, Math.min(limit, up ? above : below));
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-    setPos(up
-      ? { left, bottom: window.innerHeight - rect.top + 4, maxHeight, up: true }
-      : { left, top: rect.bottom + 4, maxHeight, up: false });
+    const place = () => {
+      const rect = anchor.current?.getBoundingClientRect();
+      if (!rect) return;
+      const margin = 12;
+      const below = window.innerHeight - rect.bottom - margin;
+      const above = rect.top - margin;
+      const up = below < Math.min(limit, 220) && above > below;
+      const maxHeight = Math.max(96, Math.min(limit, up ? above : below));
+      const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
+      setPos(up
+        ? { left, bottom: window.innerHeight - rect.top + 6, maxHeight, up: true }
+        : { left, top: rect.bottom + 6, maxHeight, up: false });
+    };
+    place();
+    window.addEventListener('resize', place);
     const frame = requestAnimationFrame(() => panel.current?.querySelector('.wd-item.is-active')?.scrollIntoView({ block: 'nearest' }));
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+    };
   }, [open, width, limit]);
 
   useEffect(() => {
@@ -158,11 +215,9 @@ export function Menu({ icon: Icon, label, text, children, wide = false, active =
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
-    window.addEventListener('resize', close);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', close);
     };
   }, [open, close]);
 
@@ -180,13 +235,18 @@ export function Menu({ icon: Icon, label, text, children, wide = false, active =
         onMouseDown={keepFocus}
         onClick={() => setOpen((value) => !value)}
       >
-        {Icon && <Icon size={16} aria-hidden="true" />}
+        {Icon && (
+          <span className={`wd-ico${mark ? ' has-mark' : ''}`}>
+            <Icon size={16} aria-hidden="true" />
+            {mark ? <i style={{ background: mark }} /> : null}
+          </span>
+        )}
         {(wide || text) && <span>{text || label}</span>}
         <ChevronDown size={12} className="wd-caret" aria-hidden="true" />
       </button>
       {alive && pos && createPortal(
-        <div ref={panel} className={`wd-pop${menuClass ? ` ${menuClass}` : ''}${open ? '' : ' is-out'}`} role="menu" style={{ left: pos.left, width, maxHeight: pos.maxHeight, ...(scroll ? { overflow: 'hidden', display: 'flex', flexDirection: 'column' } : {}), ...(pos.up ? { top: 'auto', bottom: pos.bottom } : { top: pos.top }) }} onMouseDown={(event) => { if (!event.target.closest('input, textarea, select')) event.preventDefault(); }}>
-          {scroll ? <ScrollPane>{typeof children === 'function' ? children(close) : children}</ScrollPane> : (typeof children === 'function' ? children(close) : children)}
+        <div ref={panel} className={`wd-pop is-clamped${menuClass ? ` ${menuClass}` : ''}${open ? '' : ' is-out'}`} role="menu" style={{ left: pos.left, width, maxHeight: pos.maxHeight, ...(pos.up ? { top: 'auto', bottom: pos.bottom } : { top: pos.top }) }} onMouseDown={(event) => { if (!event.target.closest('input, textarea, select')) event.preventDefault(); }}>
+          <ScrollPane maxHeight={Math.max(80, pos.maxHeight - 8)}>{typeof children === 'function' ? children(close) : children}</ScrollPane>
         </div>,
         document.body,
       )}
@@ -224,53 +284,6 @@ export const SWATCHES = [
   '#1e3a8a', '#2563eb', '#93c5fd', '#4338ca', '#7c3aed', '#e3d4f6',
 ];
 
-const THEME_COLORS = [
-  ['#0f172a', '#334155', '#64748b', '#cbd5e1', '#f8fafc'],
-  ['#14532d', '#1f6b52', '#2f6f5e', '#67bfa1', '#e7f6f1'],
-  ['#166534', '#16a34a', '#4ade80', '#bbf7d0', '#f0fdf4'],
-  ['#155e75', '#0e7490', '#22d3ee', '#a5f3fc', '#ecfeff'],
-  ['#1e3a8a', '#2563eb', '#60a5fa', '#bfdbfe', '#eff6ff'],
-  ['#4c1d95', '#7c3aed', '#a78bfa', '#ddd6fe', '#f5f3ff'],
-  ['#7f1d1d', '#be123c', '#fb7185', '#fecdd3', '#fff1f2'],
-  ['#9a3412', '#ea580c', '#fb923c', '#fed7aa', '#fff7ed'],
-];
-const STANDARD_COLORS = ['#dc2626', '#f97316', '#eab308', '#16a34a', '#06b6d4', '#2563eb', '#7c3aed', '#111827'];
-const MARKER_COLORS = ['#fff3a1', '#fde68a', '#86efac', '#99f6e4', '#93c5fd', '#f9a8d4', '#fecaca', '#e2e8f0', '#fdba74', '#67bfa1'];
-
-export function ColorGrid({ value, onPick, close, allowNone = false, noneLabel = 'Sin color', recent = [], kind = 'font' }) {
-  const pick = (color) => { onPick(color); close?.(); };
-  const swatch = (color) => (
-    <button key={color} type="button" className={`wd-swatch${value === color ? ' is-active' : ''}`} style={{ background: color }} aria-label={color} title={color} onClick={() => pick(color)} />
-  );
-  if (kind === 'highlight') {
-    return (
-      <div className="wd-colors">
-        <div className="wd-swatches is-marker">{MARKER_COLORS.map(swatch)}</div>
-        {allowNone && <button type="button" className="wd-color-none" onClick={() => pick('')}>{noneLabel}</button>}
-      </div>
-    );
-  }
-  return (
-    <div className="wd-colors">
-      {recent.length > 0 && (
-        <>
-          <span className="wd-color-label">Recientes</span>
-          <div className="wd-swatches">{recent.map(swatch)}</div>
-        </>
-      )}
-      <span className="wd-color-label">Colores del tema</span>
-      <div className="wd-swatches is-theme">{THEME_COLORS.flat().map(swatch)}</div>
-      <span className="wd-color-label">Colores estándar</span>
-      <div className="wd-swatches is-standard">{STANDARD_COLORS.map(swatch)}</div>
-      {allowNone && <button type="button" className="wd-color-none" onClick={() => pick('')}>{noneLabel}</button>}
-      <label className="wd-custom-color">
-        <input type="color" defaultValue={/^#/.test(value || '') ? value : '#2f6f5e'} onChange={(event) => onPick(event.target.value)} aria-label="Más colores" />
-        <span>Más colores</span>
-      </label>
-    </div>
-  );
-}
-
 export function FontField({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const [alive, setAlive] = useState(false);
@@ -297,11 +310,28 @@ export function FontField({ value, onChange }) {
   }, [open, alive]);
 
   useLayoutEffect(() => {
-    if (!open || !anchor.current) return;
-    const rect = anchor.current.getBoundingClientRect();
-    setPos({ left: Math.max(8, Math.min(rect.left, window.innerWidth - 228)), top: rect.bottom + 4, width: Math.max(rect.width, 210) });
+    if (!open || !anchor.current) return undefined;
+    const place = () => {
+      const rect = anchor.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const up = below < 180 && above > below;
+      const maxHeight = Math.max(120, Math.min(248, up ? above : below));
+      setPos({
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 228)),
+        width: Math.max(rect.width, 210),
+        maxHeight,
+        ...(up ? { top: 'auto', bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 4, bottom: 'auto' }),
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
     const frame = requestAnimationFrame(() => panel.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }));
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -339,8 +369,8 @@ export function FontField({ value, onChange }) {
         }}
       />
       {alive && pos && createPortal(
-        <div ref={panel} className={`wd-pop wd-font-pop${open ? '' : ' is-out'}`} role="listbox" aria-label="Fuentes" style={{ left: pos.left, top: pos.top, width: pos.width }}>
-          <ScrollPane>
+        <div ref={panel} className={`wd-pop wd-font-pop is-clamped${open ? '' : ' is-out'}`} role="listbox" aria-label="Fuentes" style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}>
+          <ScrollPane maxHeight={Math.max(96, pos.maxHeight - 8)}>
             {filtered.length === 0 && <p className="wd-font-empty">Sin coincidencias</p>}
             {filtered.map(([stack, name]) => (
               <button key={name} type="button" role="option" aria-selected={name === label} className={name === label ? 'is-active' : ''} style={{ fontFamily: stack }} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(stack)}>

@@ -223,19 +223,43 @@ export function autofit(table, mode) {
 
 export function setBorders(table, cells, { mode = 'all', color = '#cbd5e1', width = 1, style = 'solid' }) {
   const line = mode === 'none' ? 'none' : `${width}px ${style} ${color}`;
-  const targets = cells.length > 1 ? cells : [...table.querySelectorAll('td, th')];
+  const whole = ['all', 'none', 'outer', 'inner'].includes(mode);
+  const targets = whole ? (cells.length > 1 ? cells : [...table.querySelectorAll('td, th')]) : (cells.length ? cells : [...table.querySelectorAll('td, th')]);
   const grid = gridOf(table);
   const maxR = grid.length - 1;
-  const maxC = Math.max(...grid.map((row) => row.length)) - 1;
+  const maxC = Math.max(0, ...grid.map((row) => row.length)) - 1;
+  const sideKey = (side) => `border${side[0].toUpperCase()}${side.slice(1)}`;
+  if (mode === 'diagDown' || mode === 'diagUp') {
+    const angle = mode === 'diagDown' ? 'to bottom right' : 'to top right';
+    const half = Math.max(Number(width) || 1, 1) / 2;
+    targets.forEach((cell) => {
+      cell.style.backgroundImage = `linear-gradient(${angle}, transparent calc(50% - ${half}px), ${color} calc(50% - ${half}px), ${color} calc(50% + ${half}px), transparent calc(50% + ${half}px))`;
+    });
+    return;
+  }
+  if (mode === 'top' || mode === 'right' || mode === 'bottom' || mode === 'left') {
+    targets.forEach((cell) => { cell.style[sideKey(mode)] = line; });
+    table.style.borderCollapse = 'collapse';
+    return;
+  }
+  if (mode === 'horizontal' || mode === 'vertical') {
+    targets.forEach((cell) => {
+      const { r, c } = position(table, cell);
+      if (mode === 'horizontal' && r + cell.rowSpan - 1 < maxR) cell.style.borderBottom = line;
+      if (mode === 'vertical' && c + cell.colSpan - 1 < maxC) cell.style.borderRight = line;
+    });
+    table.style.borderCollapse = 'collapse';
+    return;
+  }
   targets.forEach((cell) => {
     const { r, c } = position(table, cell);
     const edges = { top: r === 0, left: c === 0, bottom: r + cell.rowSpan - 1 === maxR, right: c + cell.colSpan - 1 === maxC };
     ['top', 'right', 'bottom', 'left'].forEach((side) => {
-      const key = `border${side[0].toUpperCase()}${side.slice(1)}`;
-      if (mode === 'all' || mode === 'none') cell.style[key] = line;
-      else if (mode === 'outer') cell.style[key] = edges[side] ? line : 'none';
-      else if (mode === 'inner') cell.style[key] = edges[side] ? 'none' : line;
+      if (mode === 'all' || mode === 'none') cell.style[sideKey(side)] = line;
+      else if (mode === 'outer') cell.style[sideKey(side)] = edges[side] ? line : 'none';
+      else if (mode === 'inner') cell.style[sideKey(side)] = edges[side] ? 'none' : line;
     });
+    if (mode === 'none') cell.style.backgroundImage = '';
   });
   table.style.borderCollapse = 'collapse';
 }

@@ -801,6 +801,39 @@ export function createActions(ctx) {
     T.setBorders(table, T.selectedCells(table, rangeIn(D()) || savedRange()), { mode, ...ctx.borderPen() });
     ctx.change();
   };
+  actions.tableGridlines = () => {
+    if (!editable()) return;
+    const table = currentTable();
+    const tables = table ? [table] : [...D().querySelectorAll('table')];
+    if (!tables.length) return;
+    const show = tables.some((item) => !item.classList.contains('is-grid'));
+    tables.forEach((item) => item.classList.toggle('is-grid', show));
+    ctx.change();
+  };
+  actions.borderEdge = (kind) => {
+    if (!editable()) return;
+    if (kind === 'rule') { block('<hr class="wd-rule"><p><br></p>'); return; }
+    if (kind === 'draw') { actions.drawTable(); return; }
+    if (kind === 'grid') { actions.tableGridlines(); return; }
+    const table = currentTable();
+    if (table) {
+      T.setBorders(table, T.selectedCells(table, rangeIn(D()) || savedRange()), { mode: kind, ...ctx.borderPen() });
+      ctx.change();
+      return;
+    }
+    const paragraph = {
+      bottom: { borderBottom: '1.5px solid currentColor', paddingBottom: '4px' },
+      top: { borderTop: '1.5px solid currentColor', paddingTop: '4px' },
+      left: { borderLeft: '3px solid currentColor', paddingLeft: '10px' },
+      right: { borderRight: '3px solid currentColor', paddingRight: '10px' },
+      none: { border: 'none', borderTop: '', borderRight: '', borderBottom: '', borderLeft: '', padding: '' },
+      all: { border: '1.5px solid currentColor', padding: '6px 10px' },
+      outer: { border: '1.5px solid currentColor', padding: '6px 10px' },
+    };
+    if (!paragraph[kind]) return toast.info('Ese borde aplica dentro de una tabla.');
+    applyBlockStyle(D(), paragraph[kind]);
+    ctx.change();
+  };
 
   // ---------- Imágenes y archivos ----------
   const insertImage = (src, { width, height, alt = '', wrap = 'inline' } = {}) => {

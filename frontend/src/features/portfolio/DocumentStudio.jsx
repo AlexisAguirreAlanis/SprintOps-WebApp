@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ChevronLeft, ChevronUp, ChevronDown, Cloud, CloudOff, History, Loader2, Pencil, Users, AlertTriangle,
+  House, Plus, Palette, Columns3, BookOpen, Mail, SpellCheck, Eye, Image, Shapes, ChartColumn, Network, Table2, Box,
   Scissors, Copy, ClipboardPaste, MessageSquarePlus, Link2, Languages, ListPlus, Sparkles, BookA, Trash2, Type, TextSelect,
 } from 'lucide-react';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
@@ -44,20 +45,30 @@ import { ensureFonts } from './docs/fonts';
 import { loadLocale } from '../../domain/locale';
 
 const TABS = [
-  ['home', 'Inicio'], ['insert', 'Insertar'], ['draw', 'Dibujar'], ['design', 'Diseño'], ['layout', 'Disposición'],
-  ['references', 'Referencias'], ['mailings', 'Correspondencia'], ['review', 'Revisar'], ['view', 'Vista'],
+  ['home', 'Inicio', House], ['insert', 'Insertar', Plus], ['draw', 'Dibujar', Pencil], ['design', 'Diseño', Palette], ['layout', 'Disposición', Columns3],
+  ['references', 'Referencias', BookOpen], ['mailings', 'Correspondencia', Mail], ['review', 'Revisar', SpellCheck], ['view', 'Vista', Eye],
 ];
 
 const CONTEXT_TABS = {
-  image: ['Formato de imagen', ImageTab],
-  shape: ['Formato de forma', ShapeTab],
-  chart: ['Diseño de gráfico', ChartTab],
-  diagram: ['Diseño de SmartArt', DiagramTab],
-  table: ['Diseño de tabla', TableTab],
-  object: ['Formato de objeto', ObjectTab],
+  image: ['Formato de imagen', ImageTab, Image],
+  shape: ['Formato de forma', ShapeTab, Shapes],
+  chart: ['Diseño de gráfico', ChartTab, ChartColumn],
+  diagram: ['Diseño de SmartArt', DiagramTab, Network],
+  table: ['Diseño de tabla', TableTab, Table2],
+  object: ['Formato de objeto', ObjectTab, Box],
 };
 
-const EMPTY_SEL = { bold: false, italic: false, underline: false, strike: false, sub: false, sup: false, align: 'left', font: '', size: 0, color: '', line: '', list: null, styleId: 'normal', inTable: false, blockStyle: {} };
+const EMPTY_SEL = { bold: false, italic: false, underline: false, strike: false, sub: false, sup: false, align: 'left', font: '', size: 0, color: '', highlight: '', shade: '', line: '', list: null, styleId: 'normal', inTable: false, blockStyle: {} };
+const solidPaint = (color) => (color && color !== 'transparent' && !/rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(color) ? color : '');
+const paintBetween = (el, stop) => {
+  let node = el;
+  while (node && node !== stop) {
+    const color = solidPaint(getComputedStyle(node).backgroundColor);
+    if (color) return color;
+    node = node.parentElement;
+  }
+  return '';
+};
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#4d7c0f'];
 const colorFor = (id) => COLORS[Math.abs(Number(id) || 0) % COLORS.length];
 
@@ -111,6 +122,7 @@ const PageBody = memo(function PageBody({ pageId, html, editable, spellcheck, la
 const ChromeField = memo(function ChromeField({ field, value, placeholder, editable, editing, onInput }) {
   const ref = useRef(null);
   const kind = field.startsWith('header') ? 'header' : 'footer';
+  const filled = Boolean((value || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim());
   useLayoutEffect(() => {
     if (ref.current && document.activeElement !== ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = sanitizeHtml(value || '').replace(/^<p><br><\/p>$/, '');
   }, [value]);
@@ -120,7 +132,7 @@ const ChromeField = memo(function ChromeField({ field, value, placeholder, edita
     </div>
   ) : null;
   return (
-    <div className={`wd-chrome wd-chrome-${kind}${editing ? ' is-editing' : ''}`}>
+    <div className={`wd-chrome wd-chrome-${kind}${editing ? ' is-editing' : ''}${filled ? ' has-text' : ''}`}>
       {kind === 'footer' && rule}
       <div
         ref={ref}
@@ -264,6 +276,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
   const navigate = useNavigate();
   const rootRef = useRef(null);
   const deskRef = useRef(null);
+  const bubblePaused = useRef(false);
   const mirrorRef = useRef(null);
   const revisionRef = useRef(revision);
   const docRef = useRef(normalizeDocModel(initialDoc, createId));
@@ -717,6 +730,8 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
         font: (style?.fontFamily || '').split(',')[0].replace(/["']/g, '').trim(),
         size: style ? Math.round(parseFloat(style.fontSize)) : 0,
         color: style?.color || '',
+        highlight: paintBetween(el, block),
+        shade: solidPaint(blockStyle?.backgroundColor),
         line: block?.style.lineHeight || '',
         list: el?.closest?.('ol, ul')?.tagName || null,
         styleId,
@@ -726,7 +741,8 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       const body = range.startContainer.parentElement?.closest?.('[data-page-body]');
       if (body) setCounts((prev) => ({ ...prev, page: Number(body.closest('[data-page-index]')?.dataset.pageIndex || 0) + 1 }));
       const text = range.toString();
-      setBubble(!range.collapsed && text.trim() && editable && !pen.tool ? range.getBoundingClientRect() : null);
+      const line = [...range.getClientRects()].find((item) => item.width > 1 && item.height > 1) || range.getBoundingClientRect();
+      setBubble(!bubblePaused.current && !range.collapsed && text.trim() && editable && !pen.tool ? line : null);
       const menuState = inlineRef.current;
       if (menuState) {
         const query = (() => {
@@ -748,11 +764,35 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       frame = requestAnimationFrame(update);
     };
     document.addEventListener('selectionchange', onChange);
+    const topUi = '.wd-ribbon-wrap, .wd-top, .wd-pop, .wd-export-pop';
+    const restoreBubble = () => {
+      const range = rangeIn(deskRef.current);
+      const text = range && !range.collapsed ? range.toString() : '';
+      if (!text.trim() || !editable || pen.tool) { setBubble(null); return; }
+      const line = [...range.getClientRects()].find((item) => item.width > 1 && item.height > 1) || range.getBoundingClientRect();
+      setBubble(line);
+    };
+    const onOver = (event) => {
+      if (!event.target.closest?.(topUi)) return;
+      bubblePaused.current = true;
+      setBubble(null);
+    };
+    const onOut = (event) => {
+      if (!event.target.closest?.(topUi)) return;
+      const next = event.relatedTarget;
+      if (next?.closest?.(topUi) || next?.closest?.('.wd-bubble')) return;
+      bubblePaused.current = false;
+      restoreBubble();
+    };
+    document.addEventListener('pointerover', onOver);
+    document.addEventListener('pointerout', onOut);
     return () => {
       document.removeEventListener('selectionchange', onChange);
+      document.removeEventListener('pointerover', onOver);
+      document.removeEventListener('pointerout', onOut);
       cancelAnimationFrame(frame);
     };
-  }, [editable, pen.tool]);
+  }, [editable, pen.tool, deskRef]);
 
   const selectObject = useCallback((el, additive = false) => {
     const root = deskRef.current;
@@ -1137,6 +1177,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     return kind;
   };
   const ContextTab = contextKind ? CONTEXT_TABS[contextKind][1] : null;
+  const ContextIcon = contextKind ? CONTEXT_TABS[contextKind][2] : null;
   const activeTab = tab === 'context' && !ContextTab ? 'home' : tab;
   const TabBody = { home: HomeTab, insert: InsertTab, draw: DrawTab, design: DesignTab, layout: LayoutTab, references: ReferencesTab, mailings: MailingsTab, review: ReviewTab, view: ViewTab, context: ContextTab }[activeTab];
 
@@ -1188,7 +1229,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
           }}
         >
           <div className="wd-tabs" role="tablist" aria-label="Cinta de opciones">
-            {TABS.map(([id, label]) => (
+            {TABS.map(([id, label, Icon]) => (
               <button
                 key={id}
                 type="button"
@@ -1198,10 +1239,11 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
                 onClick={() => { setTab(id); setRibbonOpen(true); }}
                 onDoubleClick={() => setRibbonOpen((value) => !value)}
               >
+                <Icon size={14} aria-hidden="true" />
                 {label}
               </button>
             ))}
-            {ContextTab && <button type="button" role="tab" aria-selected={activeTab === 'context'} className={`wd-tab is-context${activeTab === 'context' ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => { setTab('context'); setRibbonOpen(true); }}>{CONTEXT_TABS[contextKind][0]}</button>}
+            {ContextTab && <button type="button" role="tab" aria-selected={activeTab === 'context'} className={`wd-tab is-context${activeTab === 'context' ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => { setTab('context'); setRibbonOpen(true); }}><ContextIcon size={14} aria-hidden="true" />{CONTEXT_TABS[contextKind][0]}</button>}
             <div className="wd-tabs-gap" />
             <button type="button" className="wd-tab-toggle" aria-label={ribbonOpen ? 'Contraer cinta' : 'Expandir cinta'} title={ribbonOpen ? 'Contraer cinta' : 'Expandir cinta'} onClick={() => setRibbonOpen((value) => !value)}>{ribbonOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button>
           </div>
