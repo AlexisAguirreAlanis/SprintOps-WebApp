@@ -1659,7 +1659,6 @@ const PortfolioEditorPage = () => {
             onBlur={saveName}
             onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
           />
-          {meta?.canManage && <Pencil size={14} />}
         </label>
         {meta && (
           <button

@@ -1187,7 +1187,6 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
         <Link to="/portafolio" className="pf-icon-btn" aria-label="Volver a documentos" title="Volver a documentos"><ChevronLeft size={18} /></Link>
         <label className="pf-name-wrap">
           <input className="pf-name" value={name} aria-label="Nombre del documento" disabled={!owner} onChange={(event) => setName(event.target.value)} onBlur={saveName} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
-          {owner && <Pencil size={14} />}
         </label>
         <span className="ss-kind">Documento</span>
         <button type="button" className={`wd-save-state${status === 'error' || status === 'offline' ? ' is-error' : ''}`} onClick={save} title={error || 'Guardar ahora (⌘S)'} aria-live="polite">{statusIcon}<span>{statusLabel}</span></button>

@@ -5,7 +5,6 @@ import {
   Copy,
   Download,
   Image as ImageIcon,
-  Pencil,
   Plus,
   Presentation,
   Redo2,
@@ -309,7 +308,6 @@ function SlideStudio({
         <Link to="/portafolio" className="pf-icon-btn" aria-label="Volver a Portafolio"><ChevronLeft size={18} /></Link>
         <label className="pf-name-wrap">
           <input className="pf-name" value={name} aria-label="Nombre de la presentación" disabled={!meta?.canManage} onChange={(event) => setName(event.target.value)} onBlur={saveName} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
-          {meta?.canManage && <Pencil size={14} />}
         </label>
         <span className="ss-kind">Diapositivas</span>
         <span className={`pf-status${status === 'error' ? ' is-error' : ''}`}>{statusLabel}</span>
