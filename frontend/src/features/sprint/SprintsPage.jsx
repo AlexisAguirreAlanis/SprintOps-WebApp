@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   BarChart3,
@@ -32,7 +32,7 @@ import Avatar from '../../components/Avatar';
 import { issuesRepository } from '../../data/repositories/issuesRepository';
 import { projectsRepository } from '../../data/repositories/projectsRepository';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
-import { notesRepository } from '../../data/repositories/notesRepository';
+import ProjectNotes from './ProjectNotes';
 import { formatShortDate, modeLabel, progressInfo } from '../home/projectModel';
 import { issueStatsBySprint, PROJECT_PHASE_LABEL, projectHubPhase } from './projectHub';
 import './projectHub.css';
@@ -76,10 +76,7 @@ const SprintsPage = () => {
   const [issuesLoaded, setIssuesLoaded] = useState(false);
   const [members, setMembers] = useState(null);
   const [sheets, setSheets] = useState(null);
-  const [projectNotes, setProjectNotes] = useState(null);
-  const [noteDraft, setNoteDraft] = useState('');
-  const [noteBusy, setNoteBusy] = useState(false);
-  const [noteError, setNoteError] = useState('');
+  const stageRef = useRef(null);
 
   const { checkPermission, user } = useAuth();
   const { sprints, isLoading: isLoadingSprints, addSprint, updateSprint, refetch: refetchSprints } = useSprints(projectId);
@@ -91,9 +88,6 @@ const SprintsPage = () => {
   useEffect(() => {
     setMembers(null);
     setSheets(null);
-    setProjectNotes(null);
-    setNoteDraft('');
-    setNoteError('');
     setMenuOpen(false);
   }, [projectId]);
 
@@ -113,6 +107,10 @@ const SprintsPage = () => {
     }, 240);
     return () => window.clearTimeout(timer);
   }, [tab, visibleTab]);
+
+  useEffect(() => {
+    if (stageRef.current) stageRef.current.scrollTop = 0;
+  }, [visibleTab]);
 
   useEffect(() => {
     const st = location.state;
@@ -157,55 +155,6 @@ const SprintsPage = () => {
       .catch(() => { if (!cancelled) setSheets([]); });
     return () => { cancelled = true; };
   }, [tab, sheets, projectId, user?.id]);
-
-  useEffect(() => {
-    if (tab !== 'notes' || projectNotes) return undefined;
-    let cancelled = false;
-    notesRepository.list(projectId)
-      .then((data) => { if (!cancelled) setProjectNotes(Array.isArray(data) ? data : []); })
-      .catch((err) => {
-        if (!cancelled) {
-          setProjectNotes([]);
-          setNoteError(err?.message || 'No se pudieron cargar las notas.');
-        }
-      });
-    return () => { cancelled = true; };
-  }, [tab, projectNotes, projectId]);
-
-  const addNote = async (event) => {
-    event.preventDefault();
-    const text = noteDraft.trim();
-    if (!text || noteBusy) return;
-    if (!user?.id) {
-      setNoteError('Inicia sesión para escribir una nota.');
-      return;
-    }
-    setNoteBusy(true);
-    setNoteError('');
-    try {
-      const created = await notesRepository.create(projectId, user.id, text);
-      setProjectNotes((current) => [created, ...(current || [])]);
-      setNoteDraft('');
-    } catch (err) {
-      setNoteError(err?.message || 'No se pudo guardar la nota.');
-    } finally {
-      setNoteBusy(false);
-    }
-  };
-
-  const removeNote = async (noteId) => {
-    if (!user?.id || noteBusy) return;
-    setNoteBusy(true);
-    setNoteError('');
-    try {
-      await notesRepository.remove(projectId, noteId, user.id);
-      setProjectNotes((current) => (current || []).filter((note) => note.id !== noteId));
-    } catch (err) {
-      setNoteError(err?.message || 'No se pudo eliminar la nota.');
-    } finally {
-      setNoteBusy(false);
-    }
-  };
 
   const project = projects.find((item) => String(item.id) === String(projectId)) || { name: 'Cargando proyecto...' };
   const phase = projectHubPhase(project);
@@ -289,8 +238,8 @@ const SprintsPage = () => {
         )}
       </div>
 
-      <div className="ph-stage">
-        <div key={visibleTab} className={`ph-pane${leaving ? ' is-leaving' : ' is-entering'}`}>
+      <div className="ph-stage" ref={stageRef}>
+        <div key={visibleTab} className={`ph-pane${leaving ? ' is-leaving' : ' is-entering'}${visibleTab === 'notes' ? ' is-notes' : ''}`}>
         {isLoading ? (
           <LoadingSpinner label="Cargando el proyecto..." />
         ) : visibleTab === 'sprints' ? (
@@ -364,40 +313,7 @@ const SprintsPage = () => {
             )}
           </section>
         ) : visibleTab === 'notes' ? (
-          <section className="ph-panel">
-            <h2>Notas</h2>
-            <form className="ph-note-form" onSubmit={addNote}>
-              <textarea
-                value={noteDraft}
-                onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder="Escribe una nota del proyecto..."
-                maxLength={2000}
-                aria-label="Nueva nota"
-              />
-              <button type="submit" className="ph-btn" disabled={noteBusy || !noteDraft.trim()}>
-                Agregar nota
-              </button>
-            </form>
-            {noteError && <p className="ph-error">{noteError}</p>}
-            {projectNotes == null ? (
-              <LoadingSpinner label="Cargando notas..." />
-            ) : projectNotes.length === 0 ? (
-              <p className="ph-empty">Este proyecto todavía no tiene notas.</p>
-            ) : (
-              projectNotes.map((note) => (
-                <article key={note.id} className="ph-note">
-                  <p>{note.text}</p>
-                  <footer>
-                    <span>{note.authorName || 'Sin autor'}</span>
-                    <span>{formatShortDate(note.createdAt) || ''}</span>
-                    {Number(note.authorId) === Number(user?.id) && (
-                      <button type="button" onClick={() => removeNote(note.id)} disabled={noteBusy}>Eliminar</button>
-                    )}
-                  </footer>
-                </article>
-              ))
-            )}
-          </section>
+          <ProjectNotes projectId={projectId} userId={user?.id} />
         ) : visibleTab === 'team' ? (
           <section className="ph-panel">
             <h2>Equipo</h2>
