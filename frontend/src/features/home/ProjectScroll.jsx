@@ -40,12 +40,13 @@ const ProjectScroll = ({ children }) => {
       frame = 0;
       if (!alive) return;
       const fadeMax = computeFadeSize(viewport.clientHeight);
+      const bottomMax = Math.max(20, Math.round(fadeMax * 0.78));
       const maxScroll = viewport.scrollHeight - viewport.clientHeight;
       const active = maxScroll > EDGE_EPS;
       viewport.style.setProperty('--fade-top', active ? fadeLength(viewport.scrollTop, fadeMax) : '0px');
       viewport.style.setProperty(
         '--fade-bottom',
-        active ? fadeLength(maxScroll - viewport.scrollTop, fadeMax) : '0px',
+        active ? fadeLength(maxScroll - viewport.scrollTop, bottomMax) : '0px',
       );
       const next = { up: viewport.scrollTop > EDGE_EPS, down: active && maxScroll - viewport.scrollTop > EDGE_EPS };
       setEdges((current) => (current.up === next.up && current.down === next.down ? current : next));
@@ -84,7 +85,7 @@ const ProjectScroll = ({ children }) => {
   const nudge = (direction) => viewportRef.current?.nudge?.(direction);
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
+    <div className="ps-project-scroll relative flex min-h-0 min-w-0 flex-1">
       <div
         ref={viewportRef}
         className="scroll-edge-fade no-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pr-4"

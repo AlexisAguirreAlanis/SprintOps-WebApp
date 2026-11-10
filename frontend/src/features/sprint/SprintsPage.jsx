@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   GitFork,
+  StickyNote,
   LayoutGrid,
   Layers,
   List,
@@ -27,11 +28,11 @@ import { useSprints } from './hooks/useSprints';
 import { useProjects } from '../project/hooks/useProjects';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import EmptyState from '../../components/ui/EmptyState';
-import PistacheChatbot from './components/PistacheChatbot';
 import Avatar from '../../components/Avatar';
 import { issuesRepository } from '../../data/repositories/issuesRepository';
 import { projectsRepository } from '../../data/repositories/projectsRepository';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
+import { notesRepository } from '../../data/repositories/notesRepository';
 import { formatShortDate, modeLabel, progressInfo } from '../home/projectModel';
 import { issueStatsBySprint, PROJECT_PHASE_LABEL, projectHubPhase } from './projectHub';
 import './projectHub.css';
@@ -40,6 +41,7 @@ const TABS = [
   ['sprints', 'Sprints', Layers],
   ['issues', 'Issues', CircleDot],
   ['documents', 'Documentos', FileText],
+  ['notes', 'Notas', StickyNote],
   ['team', 'Equipo', Users],
   ['metrics', 'Métricas', BarChart3],
 ];
@@ -74,16 +76,24 @@ const SprintsPage = () => {
   const [issuesLoaded, setIssuesLoaded] = useState(false);
   const [members, setMembers] = useState(null);
   const [sheets, setSheets] = useState(null);
+  const [projectNotes, setProjectNotes] = useState(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteError, setNoteError] = useState('');
 
   const { checkPermission, user } = useAuth();
   const { sprints, isLoading: isLoadingSprints, addSprint, updateSprint, refetch: refetchSprints } = useSprints(projectId);
   const { projects, isLoading: isLoadingProjects, refetch: refetchProjects } = useProjects();
   const isLoading = isLoadingSprints || isLoadingProjects;
   const canManageProject = checkPermission('canManageSprints');
+  const canCreateSprint = checkPermission('canCreateSprint');
 
   useEffect(() => {
     setMembers(null);
     setSheets(null);
+    setProjectNotes(null);
+    setNoteDraft('');
+    setNoteError('');
     setMenuOpen(false);
   }, [projectId]);
 
@@ -147,6 +157,55 @@ const SprintsPage = () => {
       .catch(() => { if (!cancelled) setSheets([]); });
     return () => { cancelled = true; };
   }, [tab, sheets, projectId, user?.id]);
+
+  useEffect(() => {
+    if (tab !== 'notes' || projectNotes) return undefined;
+    let cancelled = false;
+    notesRepository.list(projectId)
+      .then((data) => { if (!cancelled) setProjectNotes(Array.isArray(data) ? data : []); })
+      .catch((err) => {
+        if (!cancelled) {
+          setProjectNotes([]);
+          setNoteError(err?.message || 'No se pudieron cargar las notas.');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [tab, projectNotes, projectId]);
+
+  const addNote = async (event) => {
+    event.preventDefault();
+    const text = noteDraft.trim();
+    if (!text || noteBusy) return;
+    if (!user?.id) {
+      setNoteError('Inicia sesión para escribir una nota.');
+      return;
+    }
+    setNoteBusy(true);
+    setNoteError('');
+    try {
+      const created = await notesRepository.create(projectId, user.id, text);
+      setProjectNotes((current) => [created, ...(current || [])]);
+      setNoteDraft('');
+    } catch (err) {
+      setNoteError(err?.message || 'No se pudo guardar la nota.');
+    } finally {
+      setNoteBusy(false);
+    }
+  };
+
+  const removeNote = async (noteId) => {
+    if (!user?.id || noteBusy) return;
+    setNoteBusy(true);
+    setNoteError('');
+    try {
+      await notesRepository.remove(projectId, noteId, user.id);
+      setProjectNotes((current) => (current || []).filter((note) => note.id !== noteId));
+    } catch (err) {
+      setNoteError(err?.message || 'No se pudo eliminar la nota.');
+    } finally {
+      setNoteBusy(false);
+    }
+  };
 
   const project = projects.find((item) => String(item.id) === String(projectId)) || { name: 'Cargando proyecto...' };
   const phase = projectHubPhase(project);
@@ -242,6 +301,10 @@ const SprintsPage = () => {
               projectId={projectId}
               layout={layout}
               statsFor={statsFor}
+              onAddSprint={canCreateSprint ? () => {
+                setFocusSprintsInConfig(true);
+                setShowConfig(true);
+              } : null}
             />
           ) : (
             <div className="max-w-xl w-full">
@@ -300,6 +363,41 @@ const SprintsPage = () => {
               ))
             )}
           </section>
+        ) : visibleTab === 'notes' ? (
+          <section className="ph-panel">
+            <h2>Notas</h2>
+            <form className="ph-note-form" onSubmit={addNote}>
+              <textarea
+                value={noteDraft}
+                onChange={(event) => setNoteDraft(event.target.value)}
+                placeholder="Escribe una nota del proyecto..."
+                maxLength={2000}
+                aria-label="Nueva nota"
+              />
+              <button type="submit" className="ph-btn" disabled={noteBusy || !noteDraft.trim()}>
+                Agregar nota
+              </button>
+            </form>
+            {noteError && <p className="ph-error">{noteError}</p>}
+            {projectNotes == null ? (
+              <LoadingSpinner label="Cargando notas..." />
+            ) : projectNotes.length === 0 ? (
+              <p className="ph-empty">Este proyecto todavía no tiene notas.</p>
+            ) : (
+              projectNotes.map((note) => (
+                <article key={note.id} className="ph-note">
+                  <p>{note.text}</p>
+                  <footer>
+                    <span>{note.authorName || 'Sin autor'}</span>
+                    <span>{formatShortDate(note.createdAt) || ''}</span>
+                    {Number(note.authorId) === Number(user?.id) && (
+                      <button type="button" onClick={() => removeNote(note.id)} disabled={noteBusy}>Eliminar</button>
+                    )}
+                  </footer>
+                </article>
+              ))
+            )}
+          </section>
         ) : visibleTab === 'team' ? (
           <section className="ph-panel">
             <h2>Equipo</h2>
@@ -353,24 +451,27 @@ const SprintsPage = () => {
           </div>
         </div>
         <div className="ph-stats">
-          <div className="ph-stat"><Target size={16} /><span>{sprints.length}<small>Sprints</small></span></div>
-          <div className="ph-stat"><CheckCircle2 size={16} /><span>{issueTotal == null ? '—' : issueTotal}<small>Issues</small></span></div>
-          <div className="ph-stat"><Users size={16} /><span>{memberTotal == null ? '—' : memberTotal}<small>Miembros</small></span></div>
+          <div className="ph-stat"><span className="ph-stat-icon" aria-hidden="true"><Target size={16} /></span><span><b>{sprints.length}</b><small>Sprints</small></span></div>
+          <div className="ph-stat"><span className="ph-stat-icon" aria-hidden="true"><CheckCircle2 size={16} /></span><span><b>{issueTotal == null ? '—' : issueTotal}</b><small>Issues</small></span></div>
+          <div className="ph-stat"><span className="ph-stat-icon" aria-hidden="true"><Users size={16} /></span><span><b>{memberTotal == null ? '—' : memberTotal}</b><small>Miembros</small></span></div>
         </div>
         <div className="ph-progress">
-          <div className="ph-progress-label">
+          <b className="ph-progress-value">{progress ? `${progress.percent}%` : '—'}</b>
+          <div className="ph-progress-copy">
             <span>Progreso del proyecto</span>
-            <b>{progress ? `${progress.percent}%` : 'Sin datos'}</b>
-          </div>
-          <div className="ph-bar-track" aria-hidden="true">
-            <span style={{ width: `${progress?.percent || 0}%` }} />
+            <div
+              className="ph-bar-track"
+              role="progressbar"
+              aria-valuenow={progress?.percent || 0}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Progreso del proyecto"
+            >
+              <span style={{ width: `${progress?.percent || 0}%` }} />
+            </div>
           </div>
         </div>
       </footer>
-
-      {!showConfig && !showSettings && (
-        <PistacheChatbot projectId={projectId} userId={user?.id} />
-      )}
 
       {showConfig && (
         <ProjectConfigView

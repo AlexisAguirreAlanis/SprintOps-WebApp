@@ -22,7 +22,7 @@ const ProjectActionsMenu = ({ project, userId, onCoverUpdated }) => {
     <>
       <button
         type="button"
-        className="ps-icon-btn"
+        className="ps-icon-btn ps-card-more"
         aria-label={`Configurar ${project.name}`}
         aria-expanded={open}
         onClick={(event) => {

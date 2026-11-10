@@ -10,6 +10,7 @@ import { closeProjectSettings } from '../features/home/ProjectActionsMenu';
 const Navbar = ({ onSearch, searchQuery, onOpenNav }) => {
   const { user } = useAuth();
   const [notesOpen, setNotesOpen] = useState(false);
+  const [ringKey, setRingKey] = useState(0);
   const notesRef = useRef(null);
   useDismiss(notesOpen, () => setNotesOpen(false), notesRef);
 
@@ -53,38 +54,56 @@ const Navbar = ({ onSearch, searchQuery, onOpenNav }) => {
               className="ps-header-btn"
               aria-label={unread ? `Notificaciones, ${unread} sin leer` : 'Notificaciones'}
               aria-expanded={notesOpen}
-              onClick={() => setNotesOpen((open) => !open)}
+              onClick={() => {
+                if (!notesOpen) setRingKey((key) => key + 1);
+                setNotesOpen((open) => !open);
+              }}
             >
-              <Bell size={18} />
+              <span key={ringKey} className={`ps-bell${ringKey ? ' is-ringing' : ''}`}>
+                <Bell size={18} />
+                <span className="ps-bell-waves" aria-hidden="true">
+                  <i /><i /><i /><i />
+                </span>
+              </span>
               {unread > 0 && <span className="ps-dot" aria-hidden="true" />}
             </button>
-            {notesOpen && (
-              <div className="ps-popover right-0 w-72" role="menu">
-                <p className="px-3 py-2 text-sm font-bold">Notificaciones</p>
-                {notes.length === 0 ? (
-                  <p className="ps-muted px-3 pb-3 text-sm">No hay notificaciones.</p>
-                ) : (
-                  <ul className="max-h-72 overflow-y-auto">
-                    {notes.map((note) => (
-                      <li key={note.id}>
-                        <button
-                          type="button"
-                          className="ps-menu-item w-full"
-                          onClick={() => {
-                            if (!note.read) notificationsRepository.markAsRead(note.id);
-                            setNotesOpen(false);
-                          }}
-                        >
-                          <span className="min-w-0 text-left">
-                            <span className="block truncate font-semibold">{note.title || note.message || 'Notificación'}</span>
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+            <div className={`ps-notes${notesOpen ? ' is-open' : ''}`} role="dialog" aria-label="Notificaciones" aria-hidden={!notesOpen}>
+              <div className="ps-notes-head">
+                <span className="ps-notes-mark" aria-hidden="true"><Bell size={15} /></span>
+                <span className="min-w-0">
+                  <strong>Notificaciones</strong>
+                  <small>{unread > 0 ? `${unread} sin leer` : 'Al día'}</small>
+                </span>
               </div>
-            )}
+              {notes.length === 0 ? (
+                <div className="ps-notes-empty">
+                  <Bell size={20} aria-hidden="true" />
+                  <p>No hay notificaciones</p>
+                  <span>Cuando haya algo nuevo en tus proyectos, va a aparecer aquí.</span>
+                </div>
+              ) : (
+                <ul className="ps-notes-list">
+                  {notes.map((note) => (
+                    <li key={note.id}>
+                      <button
+                        type="button"
+                        className={`ps-notes-item${note.read ? ' is-read' : ''}`}
+                        onClick={() => {
+                          if (!note.read) notificationsRepository.markAsRead(note.id);
+                          setNotesOpen(false);
+                        }}
+                      >
+                        <i aria-hidden="true" />
+                        <span className="min-w-0">
+                          <strong>{note.title || note.message || 'Notificación'}</strong>
+                          {note.message && note.message !== note.title && <small>{note.message}</small>}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
 
         </div>

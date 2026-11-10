@@ -37,33 +37,6 @@
   opacity: 1;
   pointer-events: auto;
   transform: none;
-  animation: pf-menu-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.ps-popover.pf-sheet-menu.is-up.is-open {
-  animation-name: pf-menu-in-up;
-}
-
-@keyframes pf-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes pf-menu-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .pf-sheet-menu-body {
@@ -81,20 +54,45 @@
 
 .pf-sheet-menu-bar {
   position: absolute;
-  top: 10px;
-  right: 7px;
-  bottom: 10px;
-  width: 5px;
+  top: 6px;
+  right: 4px;
+  bottom: 6px;
+  width: 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--app-text) 8%, transparent);
+  background: transparent;
+  opacity: 0;
+  transform: scaleX(0.35);
+  transform-origin: right center;
   pointer-events: none;
+  transition:
+    opacity 200ms ease,
+    transform 260ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.pf-sheet-menu.is-on .pf-sheet-menu-bar {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 
 .pf-sheet-menu-bar span {
-  display: block;
-  width: 100%;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--app-muted) 72%, var(--app-surface));
+  position: absolute;
+  left: 0;
+  width: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-muted) 78%, var(--app-surface));
+  cursor: grab;
+  touch-action: none;
+  transition: background-color 140ms ease;
+}
+
+.pf-sheet-menu.is-hot .pf-sheet-menu-bar span {
+  background: var(--app-accent);
+}
+
+.pf-sheet-menu.is-drag .pf-sheet-menu-bar span {
+  background: var(--app-accent-hover, var(--app-accent));
+  cursor: grabbing;
 }
 
 .ps-menu-item.is-muted {
@@ -2019,6 +2017,7 @@ svg.pf-shape-mark.is-line path:last-child {
   .pf-star.is-on svg,
   .pf-star.is-on::after,
   .pf-sheet-menu,
+  .pf-sheet-menu-bar,
   .pf-sheet-more,
   .pf-inspector,
   .pf-templates,
@@ -2046,7 +2045,7 @@ svg.pf-shape-mark.is-line path:last-child {
   align-items: center;
   justify-content: center;
   padding: 28px;
-  background: rgb(15 23 42 / 42%);
+  background: rgb(0 0 0 / 50%);
 }
 
 .pf-gallery {

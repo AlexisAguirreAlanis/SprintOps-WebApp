@@ -21,6 +21,7 @@ const ProjectSettingsView = ({ project, userId, onClose, onUpdated }) => {
   const fileRef = useRef(null);
   const previewRef = useRef(null);
   const [host, setHost] = useState(null);
+  const [entered, setEntered] = useState(false);
   const [name, setName] = useState(project.name || '');
   const [description, setDescription] = useState(project.description || '');
   const [localCover, setLocalCover] = useState(null);
@@ -37,6 +38,12 @@ const ProjectSettingsView = ({ project, userId, onClose, onUpdated }) => {
   useEffect(() => {
     setHost(document.querySelector('.app-panel'));
   }, []);
+
+  useEffect(() => {
+    if (!host) return undefined;
+    const frame = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(frame);
+  }, [host]);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -202,7 +209,7 @@ const ProjectSettingsView = ({ project, userId, onClose, onUpdated }) => {
 
   return createPortal(
     <div
-      className="ps-settings-view"
+      className={`ps-settings-view${entered ? ' is-open' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="project-settings-title"

@@ -319,20 +319,14 @@
 }
 
 .ph-track .ph-preview {
-  height: 176px;
-}
-
-.ph-track .ph-preview-side .ph-shot {
-  height: auto;
-  min-height: 56px;
-  flex: 1;
+  height: 248px;
 }
 
 .ph-track {
   display: flex;
   width: max-content;
   min-width: 100%;
-  align-items: center;
+  align-items: stretch;
   justify-content: safe center;
   gap: 0;
   padding-inline: 28px;
@@ -343,10 +337,15 @@
   height: 42px;
   border-radius: 999px;
   box-shadow: 0 8px 22px color-mix(in srgb, var(--app-text) 8%, transparent);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 220ms ease, visibility 220ms ease;
 }
 
-.ph-nav:disabled {
-  opacity: 0.35;
+.ph-nav.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .ph-link {
@@ -354,6 +353,7 @@
   width: 64px;
   height: 28px;
   flex: 0 0 64px;
+  align-self: center;
 }
 
 .ph-link span {
@@ -450,7 +450,9 @@
   .ph-pane .ph-row,
   .ph-pane .ph-metric,
   .ph-pane .ph-empty,
-  .ph-card {
+  .ph-card,
+  .ph-add,
+  .ph-nav {
     animation: none;
     transition: none;
   }
@@ -475,8 +477,10 @@
 }
 
 .ph-preview {
-  display: flex;
-  height: 132px;
+  display: grid;
+  height: 148px;
+  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 0.78fr) minmax(0, 1fr);
   gap: 8px;
   overflow: hidden;
   padding: 10px;
@@ -484,68 +488,80 @@
   background: color-mix(in srgb, var(--app-bg) 70%, var(--app-surface));
 }
 
-.ph-preview-side {
-  display: flex;
-  width: 28%;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.ph-preview-main {
+.ph-mini {
   display: flex;
   min-width: 0;
-  flex: 1;
+  min-height: 0;
+  height: 100%;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
+  overflow: hidden;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--app-surface);
 }
 
-.ph-preview img,
-.ph-bar {
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--app-text) 8%, var(--app-surface));
+.ph-mini.is-side {
+  grid-row: 1 / span 2;
 }
 
-.ph-preview img {
-  width: 100%;
-  object-fit: cover;
-  filter: grayscale(1);
-  opacity: 0.9;
+.ph-mini.is-top {
+  justify-content: flex-start;
 }
 
-.ph-shot {
-  height: 28px;
+.ph-mini.is-bottom {
+  justify-content: flex-end;
+}
+
+.ph-mini.is-middle {
+  justify-content: center;
 }
 
 .ph-pair {
   display: grid;
   min-height: 0;
-  flex: 1;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.ph-tile {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 10px;
-  background: var(--app-surface);
+.ph-lines {
+  display: grid;
+  gap: 6px;
 }
 
-.ph-tile img {
-  min-height: 52px;
-  flex: 1;
+.ph-bar {
+  display: block;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-text) 9%, var(--app-surface));
 }
 
-.ph-tile img {
-  min-height: 52px;
-  flex: 1;
+.ph-preview img,
+.ph-shot {
+  width: 100%;
+  height: 42px;
+  flex: 0 0 42px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--app-text) 8%, var(--app-surface));
+  filter: grayscale(1);
+  opacity: 0.9;
 }
 
-.ph-tile .ph-bar {
-  height: 6px;
-  margin: 6px;
+.ph-track .ph-shot {
+  height: 58px;
+  flex-basis: 58px;
+}
+
+.ph-track .ph-mini.is-side .ph-shot,
+.ph-track .ph-mini.is-head .ph-shot {
+  height: 72px;
+  flex-basis: 72px;
+}
+
+.ph-track .ph-pair .ph-shot {
+  height: 48px;
+  flex-basis: 48px;
 }
 
 .ph-card-foot {
@@ -569,23 +585,62 @@
   color: var(--app-accent);
 }
 
-.ph-dots {
+.ph-add {
   display: flex;
+  width: 300px;
+  flex: 0 0 300px;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 6px;
-  margin-top: 14px;
+  gap: 12px;
+  padding: 16px;
+  border: 1.5px dashed color-mix(in srgb, var(--app-accent) 42%, var(--app-border));
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--app-surface) 46%, transparent);
+  color: var(--app-muted);
+  font-size: 15px;
+  font-weight: 750;
+  opacity: 0.48;
+  cursor: pointer;
+  transition:
+    opacity 280ms ease,
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 280ms ease,
+    background 280ms ease,
+    color 280ms ease;
 }
 
-.ph-dots button {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--app-text) 16%, transparent);
+.ph-add:hover,
+.ph-add:focus-visible {
+  opacity: 1;
+  transform: translateY(-8px);
+  border-color: color-mix(in srgb, var(--app-accent) 78%, var(--app-border));
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
+  color: var(--app-text);
 }
 
-.ph-dots button.is-active {
-  width: 18px;
-  background: color-mix(in srgb, var(--app-accent) 80%, #143028);
+.ph-add-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--app-accent) 14%, var(--app-surface));
+  color: var(--app-accent);
+}
+
+.ph-add--row {
+  width: 100%;
+  flex: none;
+  flex-direction: row;
+  min-height: 52px;
+  opacity: 0.62;
+}
+
+.ph-grid .ph-add {
+  width: auto;
+  flex-basis: auto;
+  min-height: 220px;
 }
 
 .ph-grid,
@@ -652,6 +707,76 @@
   text-align: center;
 }
 
+.ph-note-form {
+  display: grid;
+  gap: 10px;
+}
+
+.ph-note-form textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ph-note-form textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--app-accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.ph-note-form .ph-btn {
+  justify-self: start;
+}
+
+.ph-note {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface);
+}
+
+.ph-note p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ph-note footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ph-note footer button {
+  margin-left: auto;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ph-note footer button:hover {
+  color: var(--app-text);
+}
+
+.ph-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .ph-linkish {
   color: color-mix(in srgb, var(--app-accent) 75%, #143028);
   font-weight: 750;
@@ -687,7 +812,6 @@
   justify-content: space-between;
   margin-top: auto;
   padding: 14px 18px;
-  padding-right: 78px;
   border-radius: 18px;
   background: color-mix(in srgb, var(--app-surface) 88%, transparent);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--app-text) 4%, transparent);
@@ -706,49 +830,80 @@
 }
 
 .ph-stats {
-  gap: 22px;
+  display: grid;
+  grid-auto-columns: 128px;
+  grid-auto-flow: column;
+  gap: 8px;
 }
 
 .ph-stat {
-  display: flex;
+  display: grid;
+  width: 128px;
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 750;
+  gap: 10px;
+  padding: 7px 12px 7px 7px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--app-bg) 72%, var(--app-surface));
 }
 
-.ph-stat svg {
+.ph-stat-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--app-accent) 16%, var(--app-surface));
   color: var(--app-accent);
+}
+
+.ph-stat b {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
 }
 
 .ph-stat small {
   display: block;
+  margin-top: 2px;
   color: var(--app-muted);
   font-size: 11px;
   font-weight: 650;
+  line-height: 1;
 }
 
 .ph-progress {
   display: flex;
-  min-width: 180px;
-  flex-direction: column;
-  gap: 6px;
+  min-width: 220px;
+  align-items: center;
+  gap: 14px;
 }
 
-.ph-progress-label {
-  display: flex;
-  justify-content: space-between;
+.ph-progress-value {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: color-mix(in srgb, var(--app-accent) 72%, #143028);
+}
+
+.ph-progress-copy {
+  display: grid;
+  min-width: 132px;
+  flex: 1;
+  gap: 7px;
+}
+
+.ph-progress-copy span {
   color: var(--app-muted);
   font-size: 12px;
   font-weight: 700;
 }
 
-.ph-progress-label b {
-  color: var(--app-text);
-}
-
 .ph-bar-track {
-  height: 8px;
+  height: 11px;
   overflow: hidden;
   border-radius: 999px;
   background: color-mix(in srgb, var(--app-accent) 16%, var(--app-border));

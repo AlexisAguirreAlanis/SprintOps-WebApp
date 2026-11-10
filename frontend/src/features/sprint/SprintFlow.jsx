@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import SprintCard from './SprintCard';
 import { formatSprintRange, SPRINT_PHASE_LABEL, sprintPhase } from './projectHub';
 
-const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsFor }) => {
+const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsFor, onAddSprint }) => {
   const scrollerRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [atStart, setAtStart] = useState(true);
@@ -58,6 +58,13 @@ const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsF
     el.scrollBy({ left: box.left - host.left - (host.width - box.width) / 2, behavior: 'smooth' });
   };
 
+  const addCard = onAddSprint ? (
+    <button type="button" className="ph-add" onClick={onAddSprint}>
+      <span className="ph-add-mark" aria-hidden="true"><Plus size={22} /></span>
+      <span>Agregar sprint</span>
+    </button>
+  ) : null;
+
   const cards = sprints.map((sprint) => (
     <SprintCard
       key={sprint.id}
@@ -71,7 +78,7 @@ const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsF
   ));
 
   if (layout === 'grid') {
-    return <div className="ph-grid">{cards}</div>;
+    return <div className="ph-grid">{cards}{addCard}</div>;
   }
 
   if (layout === 'list') {
@@ -90,6 +97,11 @@ const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsF
             </button>
           );
         })}
+        {onAddSprint && (
+          <button type="button" className="ph-add ph-add--row" onClick={onAddSprint}>
+            <Plus size={16} /> Agregar sprint
+          </button>
+        )}
       </div>
     );
   }
@@ -97,7 +109,7 @@ const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsF
   return (
     <div className="ph-flow-wrap" style={{ width: '100%' }}>
       <div className="ph-flow">
-        <button type="button" className="ph-nav" aria-label="Sprint anterior" disabled={atStart} onClick={() => scrollToIndex(Math.max(0, activeIndex - 1))}>
+        <button type="button" className={`ph-nav${atStart ? ' is-hidden' : ''}`} aria-label="Sprint anterior" aria-hidden={atStart} tabIndex={atStart ? -1 : 0} onClick={() => scrollToIndex(Math.max(0, activeIndex - 1))}>
           <ChevronLeft size={18} />
         </button>
         <div
@@ -117,22 +129,20 @@ const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsF
                 )}
               </React.Fragment>
             ))}
+            {addCard && (
+              <>
+                <div className="ph-link" aria-hidden="true">
+                  <span />
+                  <ArrowRight size={14} />
+                </div>
+                {addCard}
+              </>
+            )}
           </div>
         </div>
-        <button type="button" className="ph-nav" aria-label="Sprint siguiente" disabled={atEnd} onClick={() => scrollToIndex(Math.min(sprints.length - 1, activeIndex + 1))}>
+        <button type="button" className={`ph-nav${atEnd ? ' is-hidden' : ''}`} aria-label="Sprint siguiente" aria-hidden={atEnd} tabIndex={atEnd ? -1 : 0} onClick={() => scrollToIndex(Math.min(sprints.length - 1, activeIndex + 1))}>
           <ChevronRight size={18} />
         </button>
-      </div>
-      <div className="ph-dots">
-        {sprints.map((sprint, index) => (
-          <button
-            key={sprint.id}
-            type="button"
-            className={index === activeIndex ? 'is-active' : ''}
-            aria-label={`Ver ${sprint.name}`}
-            onClick={() => scrollToIndex(index)}
-          />
-        ))}
       </div>
     </div>
   );

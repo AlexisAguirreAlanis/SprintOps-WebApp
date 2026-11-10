@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -44,10 +44,16 @@ const MENU_CAP = 248;
 function SheetMenu({ anchorRef, open, children }) {
   const menuRef = useRef(null);
   const bodyRef = useRef(null);
+  const drag = useRef(null);
+  const edge = useRef(false);
+  const hideTimer = useRef(0);
   const [box, setBox] = useState(null);
   const [thumb, setThumb] = useState(null);
   const [shown, setShown] = useState(false);
   const [mounted, setMounted] = useState(open);
+  const [live, setLive] = useState(false);
+  const [hot, setHot] = useState(false);
+  const [grabbing, setGrabbing] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -56,11 +62,13 @@ function SheetMenu({ anchorRef, open, children }) {
       return () => window.cancelAnimationFrame(frame);
     }
     setShown(false);
+    setLive(false);
+    setHot(false);
     const timer = window.setTimeout(() => setMounted(false), 200);
     return () => window.clearTimeout(timer);
   }, [open]);
 
-  const syncThumb = () => {
+  const syncThumb = useCallback(() => {
     const body = bodyRef.current;
     if (!body) return;
     const overflow = body.scrollHeight - body.clientHeight;
@@ -68,11 +76,27 @@ function SheetMenu({ anchorRef, open, children }) {
       setThumb((current) => (current ? null : current));
       return;
     }
-    const track = body.clientHeight;
-    const size = Math.max(28, Math.round((body.clientHeight / body.scrollHeight) * track));
-    const offset = Math.round((body.scrollTop / overflow) * (track - size));
+    const track = Math.max(1, body.clientHeight - 12);
+    const size = Math.max(28, Math.min(track - 6, Math.round((body.clientHeight / body.scrollHeight) * track)));
+    const offset = Math.round((body.scrollTop / overflow) * Math.max(0, track - size));
     setThumb((current) => (current && current.size === size && current.offset === offset ? current : { size, offset }));
-  };
+  }, []);
+
+  const armHide = useCallback(() => {
+    window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => {
+      if (edge.current || drag.current) return;
+      setLive(false);
+      setHot(false);
+    }, 700);
+  }, []);
+
+  const reveal = useCallback(() => {
+    setLive(true);
+    armHide();
+  }, [armHide]);
+
+  useEffect(() => () => window.clearTimeout(hideTimer.current), []);
 
   useLayoutEffect(() => {
     if (!mounted) return undefined;
@@ -115,26 +139,79 @@ function SheetMenu({ anchorRef, open, children }) {
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [anchorRef, mounted]);
+  }, [anchorRef, mounted, syncThumb]);
+
+  const onThumbDown = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const el = bodyRef.current;
+    if (!el) return;
+    drag.current = { y: event.clientY, scroll: el.scrollTop };
+    setGrabbing(true);
+    setLive(true);
+    window.clearTimeout(hideTimer.current);
+    const move = (ev) => {
+      const view = el.clientHeight;
+      const track = Math.max(1, view - 12);
+      const size = Math.max(28, Math.min(track - 6, (view / el.scrollHeight) * track));
+      const travel = Math.max(1, track - size);
+      el.scrollTop = drag.current.scroll + ((ev.clientY - drag.current.y) / travel) * (el.scrollHeight - view);
+    };
+    const up = () => {
+      drag.current = null;
+      setGrabbing(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      armHide();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const onTrackDown = (event) => {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const el = bodyRef.current;
+    if (!el) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = (event.clientY - rect.top) / rect.height;
+    el.scrollTop = ratio * el.scrollHeight - el.clientHeight / 2;
+    reveal();
+  };
+
+  const onPaneMove = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const near = event.clientX >= rect.right - 18;
+    edge.current = near;
+    if (near) reveal();
+  };
 
   if (!mounted) return null;
 
   return createPortal(
     <div
       ref={menuRef}
-      className={`ps-popover pf-sheet-menu${box?.upward ? ' is-up' : ''}${shown ? ' is-open' : ''}${thumb ? ' is-scroll' : ''}`}
+      className={`ps-popover pf-sheet-menu${box?.upward ? ' is-up' : ''}${shown ? ' is-open' : ''}${thumb ? ' is-scroll' : ''}${live ? ' is-on' : ''}${hot ? ' is-hot' : ''}${grabbing ? ' is-drag' : ''}`}
       role="menu"
       data-hide-scrollbar
       style={box
         ? { top: box.top, left: box.left, height: box.height }
         : { top: -9999, left: 0 }}
+      onPointerMove={onPaneMove}
+      onPointerLeave={() => { edge.current = false; armHide(); }}
     >
-      <div ref={bodyRef} className="pf-sheet-menu-body" data-hide-scrollbar onScroll={syncThumb}>
+      <div ref={bodyRef} className="pf-sheet-menu-body" data-hide-scrollbar onScroll={() => { syncThumb(); reveal(); }}>
         {children}
       </div>
       {thumb && (
-        <div className="pf-sheet-menu-bar" aria-hidden="true">
-          <span style={{ height: thumb.size, transform: `translateY(${thumb.offset}px)` }} />
+        <div className="pf-sheet-menu-bar" aria-hidden="true" onMouseDown={onTrackDown}>
+          <span
+            style={{ height: thumb.size, transform: `translateY(${thumb.offset}px)` }}
+            onPointerDown={onThumbDown}
+            onPointerEnter={() => setHot(true)}
+            onPointerLeave={() => { if (!drag.current) setHot(false); }}
+          />
         </div>
       )}
     </div>,
@@ -489,7 +566,16 @@ const PortfolioPage = () => {
                   >
                     <Star size={16} fill={sheet.favorite ? 'currentColor' : 'none'} />
                   </button>
-                  <button type="button" className="pf-icon-btn pf-sheet-more" aria-label={`Acciones de ${sheet.name}`} aria-expanded={menuId === sheet.id} onClick={(event) => openMenu(event, sheet)}>
+                  <button
+                    type="button"
+                    className="pf-icon-btn pf-sheet-more"
+                    aria-label={`Acciones de ${sheet.name}`}
+                    aria-expanded={menuId === sheet.id}
+                    onMouseDown={(event) => {
+                      if (event.button === 0) event.preventDefault();
+                    }}
+                    onClick={(event) => openMenu(event, sheet)}
+                  >
                     <MoreHorizontal size={16} />
                   </button>
                 </div>

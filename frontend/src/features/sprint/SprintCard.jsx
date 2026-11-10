@@ -8,6 +8,46 @@ import {
 } from './utils/sprintCollagePhotos';
 import { SPRINT_PHASE_LABEL } from './projectHub';
 
+const COLLAGE_ORDERS = [
+  ['top', 'bottom', 'middle', 'top'],
+  ['bottom', 'middle', 'top', 'bottom'],
+  ['middle', 'top', 'bottom', 'middle'],
+  ['top', 'middle', 'bottom', 'top'],
+  ['bottom', 'top', 'middle', 'bottom'],
+];
+
+function collageVariant(seed, slot) {
+  return COLLAGE_ORDERS[Math.abs(seed) % COLLAGE_ORDERS.length][slot];
+}
+
+function lineWidths(seed, slot) {
+  const wide = 58 + ((seed * 13 + slot * 17) % 28);
+  const narrow = 34 + ((seed * 7 + slot * 19) % 26);
+  return [`${wide}%`, `${narrow}%`];
+}
+
+function TextLines({ widths }) {
+  return (
+    <span className="ph-lines">
+      {widths.map((width, index) => <span key={index} className="ph-bar" style={{ width }} />)}
+    </span>
+  );
+}
+
+function MiniCard({ variant, src, fallbackIndex, className = '' }) {
+  const photo = <CollageSlot src={src} alt="" fallbackIndex={fallbackIndex} className="ph-shot" />;
+  const lines = <TextLines widths={lineWidths(fallbackIndex, variant.length)} />;
+  return (
+    <div className={`ph-mini is-${variant} ${className}`}>
+      {variant === 'bottom' && lines}
+      {variant === 'middle' && <TextLines widths={[lineWidths(fallbackIndex, 1)[0]]} />}
+      {photo}
+      {variant === 'top' && lines}
+      {variant === 'middle' && lines}
+    </div>
+  );
+}
+
 function CollageSlot({ src, alt, className, style, fallbackIndex }) {
   const fb = FALLBACK_COLLAGE_IMAGES[fallbackIndex % FALLBACK_COLLAGE_IMAGES.length];
   const [current, setCurrent] = useState(src);
@@ -65,29 +105,11 @@ const SprintCard = ({ sprint, projectId, onClick, phase = 'planned', range, stat
         <span className={`ph-pill ph-pill--${phase}`}>{SPRINT_PHASE_LABEL[phase]}</span>
       </div>
       <div className="ph-preview" aria-hidden="true">
-        <div className="ph-preview-side">
-          <CollageSlot src={u0} alt="" fallbackIndex={seed * 2} className="ph-shot" />
-          <span className="ph-bar" style={{ height: 8, width: '75%' }} />
-          <span className="ph-bar" style={{ height: 8, width: '50%' }} />
-        </div>
-        <div className="ph-preview-main">
-          <div className="ph-tile" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8 }}>
-            <CollageSlot src={u1} alt="" fallbackIndex={seed * 2 + 1} className="ph-shot" style={{ width: 42 }} />
-            <span style={{ display: 'grid', gap: 6, flex: 1 }}>
-              <span className="ph-bar" style={{ height: 7, width: '80%' }} />
-              <span className="ph-bar" style={{ height: 7, width: '45%' }} />
-            </span>
-          </div>
-          <div className="ph-pair">
-            <div className="ph-tile">
-              <CollageSlot src={u2} alt="" fallbackIndex={seed + 3} />
-              <span className="ph-bar" />
-            </div>
-            <div className="ph-tile">
-              <CollageSlot src={u3} alt="" fallbackIndex={seed + 5} />
-              <span className="ph-bar" />
-            </div>
-          </div>
+        <MiniCard variant={collageVariant(seed, 0)} src={u0} fallbackIndex={seed * 2} className="is-side" />
+        <MiniCard variant={collageVariant(seed, 1)} src={u1} fallbackIndex={seed * 2 + 1} className="is-head" />
+        <div className="ph-pair">
+          <MiniCard variant={collageVariant(seed, 2)} src={u2} fallbackIndex={seed + 3} />
+          <MiniCard variant={collageVariant(seed, 3)} src={u3} fallbackIndex={seed + 5} />
         </div>
       </div>
       <div className="ph-card-foot">

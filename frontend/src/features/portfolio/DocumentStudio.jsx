@@ -1240,10 +1240,10 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
                 onDoubleClick={() => setRibbonOpen((value) => !value)}
               >
                 <Icon size={14} aria-hidden="true" />
-                {label}
+                <span className="wd-tab-label"><span>{label}</span></span>
               </button>
             ))}
-            {ContextTab && <button type="button" role="tab" aria-selected={activeTab === 'context'} className={`wd-tab is-context${activeTab === 'context' ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => { setTab('context'); setRibbonOpen(true); }}><ContextIcon size={14} aria-hidden="true" />{CONTEXT_TABS[contextKind][0]}</button>}
+            {ContextTab && <button type="button" role="tab" aria-selected={activeTab === 'context'} className={`wd-tab is-context${activeTab === 'context' ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => { setTab('context'); setRibbonOpen(true); }}><ContextIcon size={14} aria-hidden="true" /><span className="wd-tab-label"><span>{CONTEXT_TABS[contextKind][0]}</span></span></button>}
             <div className="wd-tabs-gap" />
             <button type="button" className="wd-tab-toggle" aria-label={ribbonOpen ? 'Contraer cinta' : 'Expandir cinta'} title={ribbonOpen ? 'Contraer cinta' : 'Expandir cinta'} onClick={() => setRibbonOpen((value) => !value)}>{ribbonOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button>
           </div>

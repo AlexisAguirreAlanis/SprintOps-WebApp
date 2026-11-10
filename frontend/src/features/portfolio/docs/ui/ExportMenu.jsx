@@ -80,7 +80,7 @@ export default function ExportMenu({ name, onExport }) {
   return (
     <div className="wd-export-wrap" ref={wrap}>
       <button type="button" className="wd-export-btn" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <Download size={15} /> Exportar
+        <Download size={16} strokeWidth={2} /> Exportar
       </button>
       {alive && (
         <div className={`wd-export-pop${open ? ' is-open' : ''}`} role="dialog" aria-label="Exportar documento" style={pos ? { left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight } : undefined}>
