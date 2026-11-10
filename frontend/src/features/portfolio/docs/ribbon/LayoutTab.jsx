@@ -8,6 +8,9 @@ import { MARGIN_PRESETS, PAGE_SIZES } from '../model';
 import { WRAP_MODES } from '../engine/objects';
 
 const toCm = (px) => Math.round((px / 96) * 2.54 * 100) / 100;
+const toPx = (cm) => Math.round((Number(cm) / 2.54) * 96);
+const pxToPt = (px) => Math.round((parseFloat(px) || 0) * 0.75);
+const ptToPx = (pt) => Math.round(Number(pt) / 0.75);
 
 export default function LayoutTab({ api, sel }) {
   const { doc } = api;
@@ -99,13 +102,13 @@ export default function LayoutTab({ api, sel }) {
       <Group label="Párrafo">
         <Row>
           <span className="wd-mini-label">Sangría</span>
-          <NumberField label="Sangría izquierda (px)" value={parseFloat(block.marginLeft) || 0} min={0} max={400} step={12} suffix="izq" width={84} onChange={(value) => api.block({ marginLeft: `${value}px` })} />
-          <NumberField label="Sangría derecha (px)" value={parseFloat(block.marginRight) || 0} min={0} max={400} step={12} suffix="der" width={84} onChange={(value) => api.block({ marginRight: `${value}px` })} />
+          <NumberField label="Sangría izquierda" value={toCm(parseFloat(block.marginLeft) || 0)} min={0} max={12} step={0.25} suffix="izq" width={108} onChange={(value) => api.block({ marginLeft: `${toPx(value)}px` })} />
+          <NumberField label="Sangría derecha" value={toCm(parseFloat(block.marginRight) || 0)} min={0} max={12} step={0.25} suffix="der" width={108} onChange={(value) => api.block({ marginRight: `${toPx(value)}px` })} />
         </Row>
         <Row>
           <span className="wd-mini-label">Espaciado</span>
-          <NumberField label="Espaciado anterior (px)" value={parseFloat(block.marginTop) || 0} min={0} max={120} step={2} suffix="ant" width={84} onChange={(value) => api.block({ marginTop: `${value}px` })} />
-          <NumberField label="Espaciado posterior (px)" value={parseFloat(block.marginBottom) || 0} min={0} max={120} step={2} suffix="pos" width={84} onChange={(value) => api.block({ marginBottom: `${value}px` })} />
+          <NumberField label="Espaciado anterior" value={pxToPt(block.marginTop)} min={0} max={120} step={2} suffix="ant" width={108} onChange={(value) => api.block({ marginTop: `${ptToPx(value)}px` })} />
+          <NumberField label="Espaciado posterior" value={pxToPt(block.marginBottom)} min={0} max={120} step={2} suffix="pos" width={108} onChange={(value) => api.block({ marginBottom: `${ptToPx(value)}px` })} />
         </Row>
       </Group>
 

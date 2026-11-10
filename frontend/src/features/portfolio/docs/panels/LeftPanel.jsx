@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Images, Link2, ListTree, Search, X } from 'lucide-react';
+import { Select } from '../ui/controls';
 import { clearMatches, findAll, paintMatches, replaceAll, replaceRange, revealRange, buildPattern } from '../engine/find';
 import { issueUrl } from '../sprintops';
 
@@ -61,30 +62,27 @@ function FindPanel({ desk, find, setFind, epoch }) {
   return (
     <div className="wd-find-panel">
       <form onSubmit={(event) => { event.preventDefault(); run(find, 1); }}>
-        <input className="wd-input" autoFocus value={find.query} placeholder="Buscar en el documento" aria-label="Buscar" onChange={(event) => set({ query: event.target.value })} />
-        <div className="wd-row">
-          <span className="wd-muted">{find.results ? `${find.index + 1 || 0} de ${find.results}` : find.query || find.format ? 'Sin resultados' : ''}</span>
-          <div className="wd-status-gap" />
-          <button type="button" className="wd-btn" aria-label="Anterior" onClick={() => run(find, -1)}><ChevronUp size={15} /></button>
-          <button type="submit" className="wd-btn" aria-label="Siguiente"><ChevronDown size={15} /></button>
+        <label className="wd-find-field">
+          <Search size={15} />
+          <input autoFocus value={find.query} placeholder="Buscar en el documento" aria-label="Buscar" onChange={(event) => set({ query: event.target.value })} />
+        </label>
+        <div className="wd-find-nav">
+          <span>{find.results ? `${find.index + 1 || 0} de ${find.results}` : find.query || find.format ? 'Sin resultados' : 'Escribe para buscar'}</span>
+          <button type="button" aria-label="Anterior" onClick={() => run(find, -1)}><ChevronUp size={15} /></button>
+          <button type="submit" aria-label="Siguiente"><ChevronDown size={15} /></button>
         </div>
         <div className="wd-find-options">
-          <label><input type="checkbox" checked={find.matchCase} onChange={(event) => set({ matchCase: event.target.checked })} /> Mayúsculas/minúsculas</label>
-          <label><input type="checkbox" checked={find.wholeWord} onChange={(event) => set({ wholeWord: event.target.checked })} /> Palabra completa</label>
-          <label><input type="checkbox" checked={find.regex} onChange={(event) => set({ regex: event.target.checked })} /> Expresión regular</label>
-          <label className="wd-field-inline">Formato
-            <select value={find.format} onChange={(event) => set({ format: event.target.value })}>
-              <option value="">Cualquiera</option><option value="bold">Negrita</option><option value="italic">Cursiva</option><option value="underline">Subrayado</option>
-              <option value="highlight">Resaltado</option><option value="colored">Texto de color</option><option value="heading">En encabezados</option><option value="link">Vínculos</option><option value="comment">Comentado</option>
-            </select>
-          </label>
+          <label className="wd-check"><input type="checkbox" checked={find.matchCase} onChange={(event) => set({ matchCase: event.target.checked })} /> Mayúsculas</label>
+          <label className="wd-check"><input type="checkbox" checked={find.wholeWord} onChange={(event) => set({ wholeWord: event.target.checked })} /> Palabra completa</label>
+          <label className="wd-check"><input type="checkbox" checked={find.regex} onChange={(event) => set({ regex: event.target.checked })} /> Expresión regular</label>
         </div>
-        <button type="button" className="ps-quiet" onClick={() => setFind((current) => ({ ...current, showReplace: !current.showReplace }))}>{find.showReplace ? 'Ocultar reemplazar' : 'Reemplazar…'}</button>
+        <Select label="Formato" width={0} className="is-find" value={find.format || 'any'} options={[['any', 'Cualquier formato'], ['bold', 'Negrita'], ['italic', 'Cursiva'], ['underline', 'Subrayado'], ['highlight', 'Resaltado'], ['colored', 'Texto de color'], ['heading', 'En encabezados'], ['link', 'Vínculos'], ['comment', 'Comentado']]} onChange={(format) => set({ format: format === 'any' ? '' : format })} />
+        <button type="button" className="wd-find-toggle" onClick={() => setFind((current) => ({ ...current, showReplace: !current.showReplace }))}>{find.showReplace ? 'Ocultar reemplazar' : 'Reemplazar…'}</button>
         {find.showReplace && (
           <div className="wd-replace">
             <input className="wd-input" value={find.replace} placeholder="Reemplazar con" aria-label="Reemplazar con" onChange={(event) => setFind((current) => ({ ...current, replace: event.target.value }))} />
-            <div className="wd-row">
-              <button type="button" className="ps-quiet" onClick={() => {
+            <div className="wd-replace-actions">
+              <button type="button" onClick={() => {
                 const range = rangesRef.current[find.index];
                 if (!range) return run(find, 1);
                 replaceRange(range, find.replace, find.regex ? buildPattern(find) : null);
@@ -92,7 +90,7 @@ function FindPanel({ desk, find, setFind, epoch }) {
                 run({ ...find, index: find.index - 1 }, 1);
                 return undefined;
               }}>Reemplazar</button>
-              <button type="button" className="wd-primary" onClick={() => {
+              <button type="button" className="is-primary" onClick={() => {
                 const count = replaceAll(desk.current, find, find.replace);
                 desk.current.querySelector('[data-page-body]')?.dispatchEvent(new Event('input', { bubbles: true }));
                 setFind((current) => ({ ...current, results: 0, index: -1, note: `${count} reemplazos` }));
@@ -146,7 +144,7 @@ export default function LeftPanel({ tab, setTab, onClose, headings, pages, desk,
         <div className="wd-status-gap" />
         <button type="button" aria-label="Cerrar panel" onClick={onClose}><X size={15} /></button>
       </div>
-      <div className="wd-side-body">
+      <div className="wd-side-body" key={tab}>
         {tab === 'nav' && (
           headings.length ? (
             <nav className="wd-outline">

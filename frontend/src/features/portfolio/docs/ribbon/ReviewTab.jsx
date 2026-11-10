@@ -33,7 +33,7 @@ export default function ReviewTab({ api }) {
       </Group>
       <Group label="Idioma">
         <Row>
-          <Select label="Idioma del documento" width={110} value={doc.language} options={LANGUAGES} onChange={(language) => api.patchDoc({ language })} />
+          <span className="wd-locale-note" title="Se toma de Ajustes › Idioma">{doc.language === 'en' ? 'English' : 'Español'}</span>
           <Btn icon={Globe} label="Detectar idioma" onClick={() => api.run('detectLanguage')} />
         </Row>
         <Row>

@@ -4,26 +4,8 @@ import {
   Redo2, Replace, Scissors, Search, SquareDashed, Strikethrough, Subscript, Superscript, Type, Underline, Undo2, WandSparkles, Navigation,
   TextSelect, ScanText, BetweenHorizontalStart,
 } from 'lucide-react';
-import { Btn, ColorGrid, Group, Item, Menu, Row, Select, Sep } from '../ui/controls';
-
-export const FONTS = [
-  ['Georgia, "Times New Roman", serif', 'Georgia'],
-  ['"Times New Roman", Times, serif', 'Times New Roman'],
-  ['"Iowan Old Style", Palatino, "Palatino Linotype", serif', 'Palatino'],
-  ['Garamond, "EB Garamond", serif', 'Garamond'],
-  ['ui-sans-serif, system-ui, "Segoe UI", sans-serif', 'Sistema'],
-  ['Calibri, Carlito, "Segoe UI", sans-serif', 'Calibri'],
-  ['Arial, Helvetica, sans-serif', 'Arial'],
-  ['"Helvetica Neue", Helvetica, sans-serif', 'Helvetica'],
-  ['"Avenir Next", Avenir, "Segoe UI", sans-serif', 'Avenir'],
-  ['Verdana, Geneva, sans-serif', 'Verdana'],
-  ['Tahoma, Geneva, sans-serif', 'Tahoma'],
-  ['"Trebuchet MS", sans-serif', 'Trebuchet'],
-  ['"Gill Sans", "Gill Sans MT", sans-serif', 'Gill Sans'],
-  ['"Comic Sans MS", "Comic Neue", cursive', 'Comic Sans'],
-  ['"Courier New", Courier, monospace', 'Courier New'],
-  ['ui-monospace, SFMono-Regular, Menlo, monospace', 'Monoespaciada'],
-];
+import { Btn, ColorGrid, FontField, Group, Item, Menu, Row, Select, Sep } from '../ui/controls';
+export { FONTS } from '../fonts';
 
 export const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48, 60, 72, 96];
 
@@ -32,12 +14,12 @@ export const NAMED_STYLES = [
   { id: 'nospacing', label: 'Sin espaciado', tag: 'P', cls: 'wd-style-nospacing' },
   { id: 'title', label: 'Título', tag: 'H1', cls: 'wd-style-title' },
   { id: 'subtitle', label: 'Subtítulo', tag: 'P', cls: 'wd-style-subtitle' },
-  { id: 'h1', label: 'Encabezado 1', tag: 'H1' },
-  { id: 'h2', label: 'Encabezado 2', tag: 'H2' },
-  { id: 'h3', label: 'Encabezado 3', tag: 'H3' },
-  { id: 'h4', label: 'Encabezado 4', tag: 'H4' },
-  { id: 'h5', label: 'Encabezado 5', tag: 'H5' },
-  { id: 'h6', label: 'Encabezado 6', tag: 'H6' },
+  { id: 'h1', label: 'Título 1', tag: 'H1' },
+  { id: 'h2', label: 'Título 2', tag: 'H2' },
+  { id: 'h3', label: 'Título 3', tag: 'H3' },
+  { id: 'h4', label: 'Título 4', tag: 'H4' },
+  { id: 'h5', label: 'Título 5', tag: 'H5' },
+  { id: 'h6', label: 'Título 6', tag: 'H6' },
   { id: 'quote', label: 'Cita', tag: 'BLOCKQUOTE' },
   { id: 'intense', label: 'Cita destacada', tag: 'BLOCKQUOTE', cls: 'wd-style-intense' },
   { id: 'emphasis', label: 'Énfasis', tag: 'P', cls: 'wd-style-emphasis' },
@@ -45,6 +27,17 @@ export const NAMED_STYLES = [
   { id: 'code', label: 'Código', tag: 'PRE', cls: 'wd-code' },
 ];
 
+const Bar = () => <span className="wd-vbar" aria-hidden="true" />;
+const RIBBON_STYLES = ['normal', 'nospacing', 'h1', 'h2', 'title', 'subtitle'];
+const UNDERLINES = [['solid', '1px'], ['double', '3px'], ['dotted', '2px'], ['dashed', '2px'], ['wavy', '2px']];
+const TEXT_LOOKS = [
+  { name: 'Sombra', preview: { textShadow: '2px 2px 0 #67bfa1' }, apply: { textShadow: '2px 2px 3px rgba(15,23,42,.35)' } },
+  { name: 'Contorno', preview: { WebkitTextStroke: '1px #2f6f5e', color: 'transparent' }, apply: { WebkitTextStroke: '1px currentColor', color: 'transparent' } },
+  { name: 'Pistache', preview: { color: '#1f6b52', textShadow: '0 0 6px #67bfa1' }, apply: { color: '#1f6b52', textShadow: '0 0 6px #67bfa1, 0 0 12px #67bfa1' } },
+  { name: 'Relieve', preview: { textShadow: '-1px -1px 0 #fff, 1px 1px 0 #94a3b8' }, apply: { textShadow: '-1px -1px 0 #fff, 1px 1px 2px rgba(0,0,0,.4)' } },
+  { name: 'Reflexión', preview: { color: '#2f6f5e' }, apply: { display: 'inline-block', WebkitBoxReflect: 'below -4px linear-gradient(transparent 40%, rgba(103,191,161,.45))' } },
+  { name: 'Versalitas', preview: { fontVariant: 'small-caps', letterSpacing: '0.04em' }, apply: { fontVariant: 'small-caps' } },
+];
 const BULLETS = [['disc', '● Círculo'], ['circle', '○ Círculo vacío'], ['square', '■ Cuadrado'], ['"✓  "', '✓ Check'], ['"➤  "', '➤ Flecha'], ['"–  "', '– Guion'], ['"★  "', '★ Estrella']];
 const NUMBERS = [['decimal', '1. 2. 3.'], ['decimal-leading-zero', '01. 02. 03.'], ['lower-alpha', 'a. b. c.'], ['upper-alpha', 'A. B. C.'], ['lower-roman', 'i. ii. iii.'], ['upper-roman', 'I. II. III.']];
 
@@ -53,41 +46,43 @@ export default function HomeTab({ api, sel }) {
   return (
     <>
       <Group label="Portapapeles">
-        <Row>
-          <Menu icon={ClipboardPaste} label="Pegar" text="Pegar" width={230}>
-            {(close) => (
-              <>
-                <Item icon={ClipboardPaste} label="Pegar" hint="⌘V" close={close} onClick={() => api.run('paste')} />
-                <Item icon={Type} label="Pegar sin formato" hint="⌘⇧V" close={close} onClick={() => api.run('pastePlain')} />
-                <Item icon={WandSparkles} label="Pegado especial…" close={close} onClick={() => api.run('pasteSpecial')} />
-              </>
-            )}
-          </Menu>
-        </Row>
-        <Row>
+        <div className="wd-clip">
+          <div className="wd-paste">
+            <Menu icon={ClipboardPaste} label="Pegar" text="Pegar" width={230}>
+              {(close) => (
+                <>
+                  <Item icon={ClipboardPaste} label="Pegar" hint="⌘V" close={close} onClick={() => api.run('paste')} />
+                  <Item icon={Type} label="Pegar sin formato" hint="⌘⇧V" close={close} onClick={() => api.run('pastePlain')} />
+                  <Item icon={WandSparkles} label="Pegado especial…" close={close} onClick={() => api.run('pasteSpecial')} />
+                </>
+              )}
+            </Menu>
+          </div>
           <Btn icon={Scissors} label="Cortar (⌘X)" onClick={() => api.run('cut')} />
           <Btn icon={Copy} label="Copiar (⌘C)" onClick={() => api.run('copy')} />
           <Btn icon={Brush} label="Copiar formato (⌘⇧C) · doble clic para pegar varias veces" active={api.painter} onClick={() => api.run('copyFormat')} onDoubleClick={() => api.run('copyFormat', true)} />
-          <Btn icon={PaintBucket} label="Pegar formato (⌘⇧V con formato copiado)" onClick={() => api.run('pasteFormat')} />
           <Btn icon={Undo2} label="Deshacer (⌘Z)" disabled={!api.canUndo} onClick={() => api.run('undo')} />
           <Btn icon={Redo2} label="Rehacer (⌘⇧Z)" disabled={!api.canRedo} onClick={() => api.run('redo')} />
-        </Row>
+          <Btn icon={PaintBucket} label="Pegar formato (⌘⇧V con formato copiado)" onClick={() => api.run('pasteFormat')} />
+        </div>
       </Group>
 
       <Group label="Fuente">
         <Row>
-          <Select label="Fuente" width={132} value={FONTS.find(([value]) => sel.font && value.toLowerCase().includes(sel.font.toLowerCase()))?.[0] || ''} options={[['', sel.font || 'Fuente'], ...FONTS]} onChange={(value) => value && api.inline({ fontFamily: value })} />
-          <Select label="Tamaño" width={62} value={String(sel.size || '')} options={[['', sel.size ? String(sel.size) : '—'], ...SIZES.map((size) => [String(size), String(size)])]} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
+          <FontField value={sel.font || ''} onChange={(value) => value && api.inline({ fontFamily: value })} />
+          <Bar />
+          <Select className="is-size" label="Tamaño" width={0} value={String(sel.size || '')} options={[['', sel.size ? String(sel.size) : '—'], ...SIZES.map((size) => [String(size), String(size)])]} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
+          <Bar />
           <Btn icon={AArrowUp} label="Aumentar tamaño (⌘])" onClick={() => api.run('growFont', 1)} />
           <Btn icon={AArrowDown} label="Disminuir tamaño (⌘[)" onClick={() => api.run('growFont', -1)} />
-          <Menu icon={CaseSensitive} label="Mayúsculas y minúsculas" width={220}>
+          <Menu icon={CaseSensitive} label="Mayúsculas y minúsculas" width={250}>
             {(close) => (
               <>
-                <Item label="Tipo oración." close={close} onClick={() => api.caseOf('sentence')} />
-                <Item label="minúsculas" close={close} onClick={() => api.caseOf('lower')} />
-                <Item label="MAYÚSCULAS" close={close} onClick={() => api.caseOf('upper')} />
-                <Item label="Poner En Mayúsculas Cada Palabra" close={close} onClick={() => api.caseOf('title')} />
-                <Item label="iNVERTIR mAYÚSCULAS" close={close} onClick={() => api.caseOf('toggle')} />
+                <Item close={close} onClick={() => api.caseOf('sentence')}><span className="wd-case">Tipo oración.</span></Item>
+                <Item close={close} onClick={() => api.caseOf('lower')}><span className="wd-case">minúsculas</span></Item>
+                <Item close={close} onClick={() => api.caseOf('upper')}><span className="wd-case is-upper">MAYÚSCULAS</span></Item>
+                <Item close={close} onClick={() => api.caseOf('title')}><span className="wd-case">Poner En Mayúsculas Cada Palabra</span></Item>
+                <Item close={close} onClick={() => api.caseOf('toggle')}><span className="wd-case">aLTERNAR mAYÚSCULAS</span></Item>
               </>
             )}
           </Menu>
@@ -96,16 +91,17 @@ export default function HomeTab({ api, sel }) {
         <Row>
           <Btn icon={Bold} label="Negrita (⌘B)" active={sel.bold} onClick={() => api.cmd('bold')} />
           <Btn icon={Italic} label="Cursiva (⌘I)" active={sel.italic} onClick={() => api.cmd('italic')} />
-          <Menu icon={Underline} label="Subrayado y estilos" active={sel.underline} width={220}>
+          <Menu icon={Underline} label="Subrayado y estilos" active={sel.underline} width={210}>
             {(close) => (
               <>
-                <Item label="Subrayado" hint="⌘U" close={close} onClick={() => api.cmd('underline')} />
-                {[['double', 'Doble'], ['dotted', 'Punteado'], ['dashed', 'Discontinuo'], ['wavy', 'Ondulado']].map(([style, label]) => (
-                  <Item key={style} close={close} onClick={() => api.inline({ textDecorationLine: 'underline', textDecorationStyle: style })}><span style={{ textDecoration: `underline ${style}` }}>{label}</span></Item>
+                {UNDERLINES.map(([style, width]) => (
+                  <Item key={style} close={close} onClick={() => api.inline({ textDecorationLine: 'underline', textDecorationStyle: style, textDecorationThickness: width === '3px' ? 'auto' : width })}>
+                    <i className="wd-line-sample" style={{ borderBottomStyle: style, borderBottomWidth: width }} />
+                  </Item>
                 ))}
-                <Item label="Subrayado grueso" close={close} onClick={() => api.inline({ textDecorationLine: 'underline', textDecorationThickness: '3px' })} />
-                <Sep label="Color del subrayado" />
-                <ColorGrid onPick={(color) => api.inline({ textDecorationLine: 'underline', textDecorationColor: color })} close={close} />
+                <Item label="Ninguna" close={close} onClick={() => api.inline({ textDecorationLine: 'none' })} />
+                <Sep label="Color de subrayado" />
+                <ColorGrid kind="highlight" onPick={(color) => api.inline({ textDecorationLine: 'underline', textDecorationColor: color || 'currentColor' })} close={close} />
               </>
             )}
           </Menu>
@@ -117,23 +113,23 @@ export default function HomeTab({ api, sel }) {
               </>
             )}
           </Menu>
-          <Btn icon={Subscript} label="Subíndice (⌘,)" active={sel.sub} onClick={() => api.cmd('subscript')} />
-          <Btn icon={Superscript} label="Superíndice (⌘.)" active={sel.sup} onClick={() => api.cmd('superscript')} />
-          <Menu icon={Baseline} label="Color de fuente" width={220}>{(close) => <ColorGrid value={sel.color} recent={api.recentColors} onPick={(color) => api.inline({ color })} close={close} />}</Menu>
-          <Menu icon={Highlighter} label="Color de resaltado" width={220}>{(close) => <ColorGrid allowNone onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
-          <Menu icon={WandSparkles} label="Efectos de texto" width={240}>
+          <span className="wd-extra"><Bar /></span>
+          <Btn className="wd-extra" icon={Subscript} label="Subíndice (⌘,)" active={sel.sub} onClick={() => api.cmd('subscript')} />
+          <Btn className="wd-extra" icon={Superscript} label="Superíndice (⌘.)" active={sel.sup} onClick={() => api.cmd('superscript')} />
+          <Bar />
+          <Menu icon={Baseline} label="Color de fuente" width={248}>{(close) => <ColorGrid value={sel.color} recent={api.recentColors} onPick={(color) => api.inline({ color })} close={close} />}</Menu>
+          <Menu icon={Highlighter} label="Color de resaltado" width={196}>{(close) => <ColorGrid kind="highlight" allowNone noneLabel="Sin color" onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
+          <Menu icon={WandSparkles} label="Efectos de texto" width={230}>
             {(close) => (
               <>
-                <Item label="Contorno" close={close} onClick={() => api.inline({ WebkitTextStroke: '1px currentColor', color: 'transparent' })} />
-                <Item label="Sombra" close={close} onClick={() => api.inline({ textShadow: '2px 2px 3px rgba(15,23,42,.35)' })} />
-                <Item label="Reflexión" close={close} onClick={() => api.inline({ display: 'inline-block', WebkitBoxReflect: 'below -4px linear-gradient(transparent 40%, rgba(255,255,255,.4))' })} />
-                <Item label="Iluminado" close={close} onClick={() => api.inline({ textShadow: '0 0 6px #67bfa1, 0 0 12px #67bfa1' })} />
-                <Item label="Relieve" close={close} onClick={() => api.inline({ textShadow: '-1px -1px 0 #fff, 1px 1px 2px rgba(0,0,0,.4)' })} />
-                <Item label="Versalitas" close={close} onClick={() => api.inline({ fontVariant: 'small-caps' })} />
-                <Item label="Quitar efectos" close={close} onClick={() => api.inline({ textShadow: 'none', WebkitTextStroke: '0', WebkitBoxReflect: 'none', fontVariant: 'normal' })} />
+                <div className="wd-effect-grid">
+                  {TEXT_LOOKS.map((look) => (
+                    <button key={look.name} type="button" title={look.name} style={look.preview} onClick={() => { api.inline(look.apply); close(); }}>A</button>
+                  ))}
+                </div>
+                <Item label="Quitar efectos" close={close} onClick={() => api.inline({ textShadow: 'none', WebkitTextStroke: '0', WebkitBoxReflect: 'none', fontVariant: 'normal', color: '' })} />
                 <Sep />
                 <Item label="Fuente avanzada…" hint="⌘D" close={close} onClick={() => api.run('fontDialog')} />
-                <Item label="Establecer fuente predeterminada…" close={close} onClick={() => api.run('defaultFont')} />
               </>
             )}
           </Menu>
@@ -178,9 +174,10 @@ export default function HomeTab({ api, sel }) {
               </>
             )}
           </Menu>
+          <Bar />
           <Btn icon={IndentDecrease} label="Disminuir sangría" onClick={() => api.run('indent', -1)} />
           <Btn icon={IndentIncrease} label="Aumentar sangría" onClick={() => api.run('indent', 1)} />
-          <Menu icon={ArrowDownAZ} label="Ordenar" width={200}>
+          <span className="wd-extra"><Menu icon={ArrowDownAZ} label="Ordenar" width={200}>
             {(close) => (
               <>
                 <Item label="A → Z" close={close} onClick={() => api.run('sort', 'asc')} />
@@ -189,19 +186,20 @@ export default function HomeTab({ api, sel }) {
                 <Item label="Numérico descendente" close={close} onClick={() => api.run('sort', 'desc', true)} />
               </>
             )}
-          </Menu>
-          <Btn icon={Pilcrow} label="Mostrar marcas de formato (⌘*)" active={api.view.marks} onClick={() => api.setView({ marks: !api.view.marks })} />
+          </Menu></span>
+          <Btn className="wd-extra" icon={Pilcrow} label="Mostrar marcas de formato (⌘*)" active={api.view.marks} onClick={() => api.setView({ marks: !api.view.marks })} />
         </Row>
         <Row>
           <Btn icon={AlignLeft} label="Alinear a la izquierda (⌘L)" active={sel.align === 'left' || sel.align === 'start'} onClick={() => api.cmd('justifyLeft')} />
           <Btn icon={AlignCenter} label="Centrar (⌘E)" active={sel.align === 'center'} onClick={() => api.cmd('justifyCenter')} />
           <Btn icon={AlignRight} label="Alinear a la derecha (⌘R)" active={sel.align === 'right' || sel.align === 'end'} onClick={() => api.cmd('justifyRight')} />
           <Btn icon={AlignJustify} label="Justificar (⌘J)" active={sel.align === 'justify'} onClick={() => api.cmd('justifyFull')} />
+          <Bar />
           <Menu icon={BetweenHorizontalStart} label="Interlineado y espaciado" width={240}>
             {(close) => (
               <>
-                {[['1', 'Sencillo'], ['1.15', '1.15'], ['1.5', '1.5'], ['2', 'Doble'], ['2.5', '2.5'], ['3', '3.0']].map(([value, label]) => <Item key={value} label={label} active={String(sel.line) === value} close={close} onClick={() => api.block({ lineHeight: value })} />)}
-                <Item label="Personalizado…" close={close} onClick={() => api.run('paragraphDialog')} />
+                {[['1', '1.0'], ['1.15', '1.15'], ['1.5', '1.5'], ['2', '2.0'], ['2.5', '2.5'], ['3', '3.0']].map(([value, label]) => <Item key={value} label={label} active={String(sel.line) === value} close={close} onClick={() => api.block({ lineHeight: value })} />)}
+                <Item label="Opciones de interlineado…" close={close} onClick={() => api.run('paragraphDialog')} />
                 <Sep label="Espaciado" />
                 <Item label="Agregar espacio antes" close={close} onClick={() => api.block({ marginTop: '12px' })} />
                 <Item label="Quitar espacio antes" close={close} onClick={() => api.block({ marginTop: '0px' })} />
@@ -228,28 +226,37 @@ export default function HomeTab({ api, sel }) {
         </Row>
       </Group>
 
-      <Group label="Estilos">
-        <div className="wd-style-gallery" role="listbox" aria-label="Estilos">
-          {styles.map((style) => (
-            <button key={style.id} type="button" role="option" aria-selected={sel.styleId === style.id} className={`wd-style-chip wd-chip-${style.id}${sel.styleId === style.id ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => api.setTag(style.tag, style.cls || '')}>
-              {style.label}
-            </button>
-          ))}
+      <Group label="Estilos" grow>
+        <div className="wd-style-row">
+          <div className="wd-style-gallery" role="listbox" aria-label="Estilos">
+            {RIBBON_STYLES.map((id) => styles.find((style) => style.id === id)).filter(Boolean).map((style) => (
+              <button key={style.id} type="button" role="option" aria-selected={sel.styleId === style.id} className={`wd-style-chip wd-chip-${style.id}${sel.styleId === style.id ? ' is-active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => api.setTag(style.tag, style.cls || '')}>
+                {style.label}
+              </button>
+            ))}
+          </div>
+          <Menu icon={Type} label="Estilos" width={280}>
+            {(close) => (
+              <>
+                <div className="wd-style-menu">
+                  {styles.map((style) => (
+                    <button key={style.id} type="button" className={`wd-style-tile wd-chip-${style.id}${sel.styleId === style.id ? ' is-active' : ''}`} onClick={() => { api.setTag(style.tag, style.cls || ''); close(); }}>
+                      {style.label}
+                    </button>
+                  ))}
+                </div>
+                <Sep />
+                <Item label="Crear un estilo…" close={close} onClick={() => api.run('createStyle')} />
+                <Item label="Borrar formato" close={close} onClick={() => api.run('clearFormat')} />
+                <Item label="Administrar estilos…" close={close} onClick={() => api.run('manageStyles')} />
+              </>
+            )}
+          </Menu>
         </div>
-        <Menu icon={Type} label="Administrar estilos" width={240}>
-          {(close) => (
-            <>
-              <Item label="Crear estilo desde la selección…" close={close} onClick={() => api.run('createStyle')} />
-              <Item label="Modificar estilo…" close={close} onClick={() => api.run('editStyle')} />
-              <Item label="Administrar estilos…" close={close} onClick={() => api.run('manageStyles')} />
-              <Item label="Establecer como predeterminados" close={close} onClick={() => api.run('setDefaultStyles')} />
-            </>
-          )}
-        </Menu>
       </Group>
 
       <Group label="Edición">
-        <Row>
+        <div className="wd-edit">
           <Menu icon={Search} label="Buscar" text="Buscar" width={230}>
             {(close) => (
               <>
@@ -260,9 +267,7 @@ export default function HomeTab({ api, sel }) {
               </>
             )}
           </Menu>
-          <Btn icon={Replace} label="Reemplazar (⌘H)" wide onClick={() => api.run('find', { replace: true })} />
-        </Row>
-        <Row>
+          <Btn icon={Replace} label="Reemplazar (⌘H)" wide onClick={() => api.run('find', { replace: true })}>Reemplazar</Btn>
           <Menu icon={MousePointer2} label="Seleccionar" text="Seleccionar" width={250}>
             {(close) => (
               <>
@@ -273,7 +278,7 @@ export default function HomeTab({ api, sel }) {
               </>
             )}
           </Menu>
-        </Row>
+        </div>
       </Group>
     </>
   );

@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  ChevronLeft, ChevronUp, ChevronDown, Cloud, CloudOff, Download, History, Loader2, MoreHorizontal, Pencil, Users, AlertTriangle,
+  ChevronLeft, ChevronUp, ChevronDown, Cloud, CloudOff, History, Loader2, Pencil, Users, AlertTriangle,
   Scissors, Copy, ClipboardPaste, MessageSquarePlus, Link2, Languages, ListPlus, Sparkles, BookA, Trash2, Type, TextSelect,
 } from 'lucide-react';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
@@ -12,7 +12,7 @@ import './docs/docs.css';
 import { HEADER_SPACE, bodyHeight, formatPageNumber, normalizeDocModel, pageMetrics, plainText } from './docs/model';
 import { sanitizeHtml } from './docs/sanitize';
 import {
-  caretPosition, createHistory, currentBlock, rangeIn, rememberSelection, restoreCaretPosition, restoreSelection, selectedBlocks,
+  caretPosition, clearHold, createHistory, currentBlock, holdSelection, rangeIn, rememberSelection, restoreCaretPosition, restoreSelection, selectedBlocks, selectionHeld,
   applyInlineStyle, applyBlockStyle, setBlockTag, transformCase, insertHtml, insertBlockHtml, exec, anchorElement, wordsOf, setMultiRanges,
 } from './docs/engine/core';
 import { reflow } from './docs/engine/pagination';
@@ -38,12 +38,13 @@ import ViewTab, { VIEW_MODES } from './docs/ribbon/ViewTab';
 import { ChartTab, DiagramTab, ImageTab, ObjectTab, ShapeTab, TableTab } from './docs/ribbon/ContextTabs';
 import LeftPanel from './docs/panels/LeftPanel';
 import RightPanel from './docs/panels/RightPanel';
-import FileBackstage from './docs/panels/FileBackstage';
+import ExportMenu from './docs/ui/ExportMenu';
 import { SLASH_COMMANDS } from './docs/render/blocks';
-import { LANGUAGES } from './docs/ribbon/ReviewTab';
+import { ensureFonts } from './docs/fonts';
+import { loadLocale } from '../../domain/locale';
 
 const TABS = [
-  ['file', 'Archivo'], ['home', 'Inicio'], ['insert', 'Insertar'], ['draw', 'Dibujar'], ['design', 'Diseño'], ['layout', 'Disposición'],
+  ['home', 'Inicio'], ['insert', 'Insertar'], ['draw', 'Dibujar'], ['design', 'Diseño'], ['layout', 'Disposición'],
   ['references', 'Referencias'], ['mailings', 'Correspondencia'], ['review', 'Revisar'], ['view', 'Vista'],
 ];
 
@@ -107,36 +108,154 @@ const PageBody = memo(function PageBody({ pageId, html, editable, spellcheck, la
   );
 });
 
-const ChromeField = memo(function ChromeField({ field, value, placeholder, editable, onInput }) {
+const ChromeField = memo(function ChromeField({ field, value, placeholder, editable, editing, onInput }) {
   const ref = useRef(null);
+  const kind = field.startsWith('header') ? 'header' : 'footer';
   useLayoutEffect(() => {
     if (ref.current && document.activeElement !== ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = sanitizeHtml(value || '').replace(/^<p><br><\/p>$/, '');
   }, [value]);
+  const rule = editing ? (
+    <div className="wd-chrome-rule" aria-hidden="true">
+      <span className="wd-chrome-tag">{placeholder}</span>
+    </div>
+  ) : null;
   return (
-    <div
-      ref={ref}
-      className={`wd-chrome wd-chrome-${field.startsWith('header') ? 'header' : 'footer'}`}
-      data-chrome={field}
-      contentEditable={editable}
-      suppressContentEditableWarning
-      data-placeholder={placeholder}
-      onInput={(event) => onInput(field, event.currentTarget)}
-    />
+    <div className={`wd-chrome wd-chrome-${kind}${editing ? ' is-editing' : ''}`}>
+      {kind === 'footer' && rule}
+      <div
+        ref={ref}
+        className="wd-chrome-text"
+        data-chrome={field}
+        contentEditable={editable && editing}
+        suppressContentEditableWarning
+        data-placeholder={editing ? 'Escribe aquí' : ''}
+        onInput={(event) => onInput(field, event.currentTarget)}
+      />
+      {kind === 'header' && rule}
+    </div>
   );
 });
 
-function Ruler({ axis, length, start, end }) {
+const RULER_CM = 96 / 2.54;
+const RULER_SNAP = RULER_CM / 4;
+
+function rulerPx(value) {
+  const number = parseFloat(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function snapRuler(value, limit) {
+  const snapped = Math.round(value / RULER_SNAP) * RULER_SNAP;
+  return Math.min(limit, Math.max(0, snapped));
+}
+
+function paragraphMarks(length, marginStart, marginEnd, paragraph) {
+  const contentLeft = marginStart;
+  const contentRight = length - marginEnd;
+  const marginLeft = rulerPx(paragraph?.marginLeft);
+  const marginRight = rulerPx(paragraph?.marginRight);
+  const textIndent = rulerPx(paragraph?.textIndent);
+  const pad = rulerPx(paragraph?.paddingLeft);
+  const body = contentLeft + marginLeft + (textIndent < 0 ? pad || -textIndent : 0);
+  const first = contentLeft + marginLeft + textIndent;
+  return {
+    first,
+    body,
+    right: contentRight - marginRight,
+    contentLeft,
+    contentRight,
+  };
+}
+
+function marksToStyle(marks) {
+  const marginLeft = Math.min(marks.first, marks.body) - marks.contentLeft;
+  const textIndent = marks.first - marks.body;
+  return {
+    marginLeft: `${Math.max(0, Math.round(marginLeft))}px`,
+    marginRight: `${Math.max(0, Math.round(marks.contentRight - marks.right))}px`,
+    textIndent: textIndent ? `${Math.round(textIndent)}px` : '',
+    paddingLeft: textIndent < 0 ? `${Math.round(-textIndent)}px` : '',
+  };
+}
+
+function PageRuler({ axis, length, marginStart, marginEnd, paragraph, editable, onIndent, onCommit }) {
+  const base = paragraphMarks(length, marginStart, marginEnd, paragraph);
+  const [live, setLive] = useState(null);
+  const [readout, setReadout] = useState(null);
+  const liveRef = useRef(null);
+  const baseRef = useRef(base);
+  baseRef.current = base;
+  const marks = live || base;
   const ticks = [];
-  const cm = 96 / 2.54;
-  for (let value = 0; value <= length; value += cm / 2) ticks.push(value);
+  for (let value = 0; value <= length; value += RULER_CM / 2) ticks.push(value);
+
+  const drag = (event, kind) => {
+    if (!editable || axis !== 'x') return;
+    event.preventDefault();
+    event.stopPropagation();
+    const ruler = event.currentTarget.closest('.wd-ruler');
+    const rect = ruler.getBoundingClientRect();
+    const toPage = (client) => ((client - rect.left) / rect.width) * length;
+    const origin = { ...baseRef.current };
+    const grab = toPage(event.clientX);
+    let moved = false;
+    const apply = (next) => {
+      moved = true;
+      liveRef.current = next;
+      setLive(next);
+      const marker = kind === 'right' ? next.right : kind === 'first' ? next.first : next.body;
+      setReadout({ x: marker, text: `${((marker - next.contentLeft) / RULER_CM).toFixed(2)} cm` });
+      onIndent?.(marksToStyle(next));
+    };
+    const move = (ev) => {
+      const delta = toPage(ev.clientX) - grab;
+      const next = { ...origin };
+      const place = (value, max) => snapRuler(Math.min(value, max), length);
+      if (kind === 'first') next.first = place(origin.first + delta, origin.right - 16);
+      if (kind === 'body') {
+        next.body = place(origin.body + delta, origin.right - 16);
+        if (next.body < origin.first) next.first = next.body;
+      }
+      if (kind === 'both') {
+        next.body = place(origin.body + delta, origin.right - 16);
+        next.first = place(origin.first + delta, origin.right - 16);
+      }
+      if (kind === 'right') next.right = snapRuler(Math.max(origin.right + delta, Math.max(origin.body, origin.first) + 16), length);
+      apply(next);
+    };
+    const up = () => {
+      setLive(null);
+      setReadout(null);
+      liveRef.current = null;
+      if (moved) onCommit?.();
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   return (
-    <div className={`wd-ruler wd-ruler-${axis}`} style={axis === 'x' ? { width: length } : { height: length }} aria-hidden="true">
-      <span className="wd-ruler-margin" style={axis === 'x' ? { left: start, width: Math.max(0, length - start - end) } : { top: start, height: Math.max(0, length - start - end) }} />
+    <div
+      className={`wd-ruler wd-ruler-${axis}${editable && axis === 'x' ? ' is-live' : ''}`}
+      style={axis === 'x' ? { width: length } : { height: length }}
+      aria-hidden={axis === 'y'}
+    >
+      <span className="wd-ruler-margin" style={axis === 'x' ? { left: marginStart, width: Math.max(0, length - marginStart - marginEnd) } : { top: marginStart, height: Math.max(0, length - marginStart - marginEnd) }} />
       {ticks.map((value, index) => (
         <span key={value} className={`wd-tick${index % 2 === 0 ? ' is-major' : ''}`} style={axis === 'x' ? { left: value } : { top: value }}>
-          {index % 2 === 0 && index > 0 ? index / 2 : ''}
+          {index % 2 === 0 && index > 0 ? <em>{index / 2}</em> : null}
         </span>
       ))}
+      {axis === 'x' && editable && (
+        <>
+          <button type="button" className="wd-indent is-first" style={{ left: marks.first }} aria-label="Sangría de primera línea" onPointerDown={(event) => drag(event, 'first')} />
+          <button type="button" className="wd-indent is-body" style={{ left: marks.body }} aria-label="Sangría izquierda" onPointerDown={(event) => drag(event, 'body')} />
+          <button type="button" className="wd-indent is-both" style={{ left: marks.body }} aria-label="Mover sangría izquierda y primera línea" onPointerDown={(event) => drag(event, 'both')} />
+          <button type="button" className="wd-indent is-right" style={{ left: marks.right }} aria-label="Sangría derecha" onPointerDown={(event) => drag(event, 'right')} />
+          {readout && <span className="wd-indent-readout" style={{ left: readout.x }}>{readout.text}</span>}
+        </>
+      )}
     </div>
   );
 }
@@ -168,8 +287,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
   const [epoch, setEpoch] = useState(0);
   const [tab, setTab] = useState('home');
   const [ribbonOpen, setRibbonOpen] = useState(true);
-  const [backstage, setBackstage] = useState(null);
-  const [view, setViewState] = useState({ mode: 'print', zoom: 1, fit: null, layout: 'single', rulers: true, vruler: true, grid: false, marks: false, bounds: false, split: false, syncScroll: true, compare: null, markup: 'all', spellcheck: true });
+  const [view, setViewState] = useState({ mode: 'print', zoom: 1, fit: null, layout: 'single', rulers: false, vruler: false, grid: false, marks: false, bounds: false, split: false, syncScroll: true, compare: null, markup: 'all', spellcheck: true });
   const [left, setLeft] = useState({ open: false, tab: 'nav' });
   const [right, setRight] = useState({ open: false, tab: 'comments' });
   const [sel, setSel] = useState(EMPTY_SEL);
@@ -199,6 +317,36 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
   const [borderPen, setBorderPenState] = useState({ style: 'solid', width: 1, color: '#334155' });
   const [autosave, setAutosaveState] = useState(() => storage.get('autosave', true));
   const [finalOverride, setFinalOverride] = useState(false);
+  const [chromeEdit, setChromeEdit] = useState(null);
+  const [locale, setLocale] = useState(() => loadLocale());
+
+  useEffect(() => {
+    const sync = (next) => {
+      const id = next === 'en' || next === 'es' ? next : loadLocale();
+      setLocale(id);
+      if (docRef.current?.language !== id) {
+        docRef.current = { ...docRef.current, language: id };
+        setDoc(docRef.current);
+      }
+    };
+    const onLocale = (event) => sync(event.detail);
+    window.addEventListener('sprintops-locale', onLocale);
+    sync(loadLocale());
+    return () => window.removeEventListener('sprintops-locale', onLocale);
+  }, []);
+
+  useEffect(() => {
+    if (!chromeEdit) return;
+    const field = deskRef.current?.querySelector(`[data-chrome="${chromeEdit}"]`);
+    if (!field || document.activeElement === field) return;
+    field.focus();
+    const range = document.createRange();
+    range.selectNodeContents(field);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }, [chromeEdit]);
   const [collab, setCollab] = useState([]);
   const [mirrorHtml, setMirrorHtml] = useState('');
   const [savedAt, setSavedAt] = useState(null);
@@ -311,6 +459,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
 
   const applyModel = useCallback((model, { caret = null, keepHistory = false } = {}) => {
     const next = normalizeDocModel(model, createId);
+    next.language = loadLocale();
     docRef.current = next;
     setDoc(next);
     const root = deskRef.current;
@@ -347,6 +496,8 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     }
     change({ noHistory: true });
   }, [change]);
+
+  useEffect(() => { ensureFonts(); }, []);
 
   // Reflow cuando cambia el número de páginas o la geometría.
   useLayoutEffect(() => {
@@ -542,7 +693,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       const root = deskRef.current;
       const range = rangeIn(root);
       if (!range) {
-        setBubble(null);
+        if (!selectionHeld()) setBubble(null);
         return;
       }
       rememberSelection(root);
@@ -570,7 +721,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
         list: el?.closest?.('ol, ul')?.tagName || null,
         styleId,
         inTable: Boolean(tableCell),
-        blockStyle: block ? { marginLeft: block.style.marginLeft, marginRight: block.style.marginRight, marginTop: block.style.marginTop || blockStyle.marginTop, marginBottom: block.style.marginBottom || blockStyle.marginBottom } : {},
+        blockStyle: block ? { marginLeft: block.style.marginLeft, marginRight: block.style.marginRight, textIndent: block.style.textIndent, paddingLeft: block.style.paddingLeft, marginTop: block.style.marginTop || blockStyle.marginTop, marginBottom: block.style.marginBottom || blockStyle.marginBottom } : {},
       });
       const body = range.startContainer.parentElement?.closest?.('[data-page-body]');
       if (body) setCounts((prev) => ({ ...prev, page: Number(body.closest('[data-page-index]')?.dataset.pageIndex || 0) + 1 }));
@@ -668,12 +819,18 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     pen: () => pen, setPen, inkSel: () => inkSel, setInkSel,
     mergePreview: () => mergePreview, setMergePreview,
     painter: () => painter, setPainter,
-    setBanner, setReading, setGrammar, setBackstage, setActiveComment, setFinalOverride,
+    setBanner, setReading, setGrammar, setActiveComment, setFinalOverride,
     revision: () => revisionRef.current, setRevision: (value) => { revisionRef.current = value; }, base: () => baseRef.current, setBase: (model) => { baseRef.current = model; },
     autosave: () => autosave, setAutosave: (value) => { setAutosaveState(value); storage.set('autosave', value); },
     borderPen: () => borderPen,
     rootEl: () => rootRef.current,
     setStatus,
+    openChrome: (kind) => {
+      const field = deskRef.current?.querySelector(`[data-chrome^="${kind}"]`);
+      if (!field) return;
+      if (field.dataset.chrome === chromeEdit) field.focus();
+      else setChromeEdit(field.dataset.chrome);
+    },
   };
   const actions = createActions(ctx);
   timers.current.resolveConflict = actions.resolveConflict;
@@ -883,6 +1040,20 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
   };
 
   const onDoubleClick = (event) => {
+    const page = event.target.closest?.('.wd-page');
+    if (page && !event.target.closest('figure.wd-obj, figure.wd-mermaid, .wd-eq')) {
+      const box = page.getBoundingClientRect();
+      const y = event.clientY - box.top;
+      const margins = docRef.current.margins;
+      const bodyBox = page.querySelector('.wd-body-wrap')?.getBoundingClientRect();
+      const inHeader = y >= 0 && y <= Math.max(margins.top + 24, 108) && (!bodyBox || event.clientY <= bodyBox.top + 8);
+      const inFooter = y <= box.height && box.height - y <= Math.max(margins.bottom + 24, 108);
+      if (inHeader || inFooter) {
+        const kind = inFooter && (!inHeader || y > box.height / 2) ? 'footer' : 'header';
+        setChromeEdit(page.querySelector(`[data-chrome^="${kind}"]`)?.dataset.chrome || null);
+        return;
+      }
+    }
     const obj = event.target.closest('figure.wd-obj, figure.wd-mermaid, .wd-eq, .wd-progress-block, a.wd-ref, [data-page-body] img');
     if (!obj) return;
     if (obj.matches('a.wd-ref')) return void actions.followLink(obj);
@@ -902,6 +1073,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     deskRef.current?.querySelectorAll(`[data-chrome="${field}"]`).forEach((node) => { if (node !== el) node.innerHTML = el.innerHTML; });
     dirtyRef.current = true;
     epochRef.current += 1;
+    setDoc(docRef.current);
     setDirty(true);
     setEpoch(epochRef.current);
   }, []);
@@ -986,9 +1158,8 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
         </div>
         <Btn icon={History} label="Historial de versiones" onClick={() => setRight({ open: true, tab: 'history' })} />
         <Btn icon={Users} label="Colaboradores" onClick={() => setRight({ open: true, tab: 'people' })} />
-        <Btn icon={Download} label="Exportar" wide onClick={() => setBackstage('export')} />
+        <ExportMenu name={name} onExport={(format) => actions.exportAs(format)} />
         <SheetShare hojaId={hojaId} user={user} meta={meta} onMeta={onMeta} />
-        <Btn icon={MoreHorizontal} label="Más opciones" onClick={() => setBackstage('info')} />
       </header>
 
       {banner && (
@@ -1005,17 +1176,26 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       )}
 
       {view.mode !== 'read' && view.mode !== 'focus' && (
-        <div className="wd-ribbon-wrap">
+        <div
+          className="wd-ribbon-wrap"
+          onMouseDownCapture={(event) => {
+            if (event.target.closest('input, textarea, select')) {
+              holdSelection(deskRef.current);
+              return;
+            }
+            event.preventDefault();
+            holdSelection(deskRef.current);
+          }}
+        >
           <div className="wd-tabs" role="tablist" aria-label="Cinta de opciones">
             {TABS.map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 role="tab"
-                aria-selected={id === 'file' ? false : activeTab === id}
-                className={`wd-tab${id === 'file' ? ' is-file' : ''}${activeTab === id ? ' is-active' : ''}`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => (id === 'file' ? setBackstage('home') : (setTab(id), setRibbonOpen(true)))}
+                aria-selected={activeTab === id}
+                className={`wd-tab${activeTab === id ? ' is-active' : ''}`}
+                onClick={() => { setTab(id); setRibbonOpen(true); }}
                 onDoubleClick={() => setRibbonOpen((value) => !value)}
               >
                 {label}
@@ -1043,6 +1223,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onDrop={onDrop}
+          onMouseDown={(event) => { clearHold(); if (!event.target.closest('.wd-chrome')) setChromeEdit(null); }}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
           onContextMenu={onContextMenu}
@@ -1063,11 +1244,22 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
               const border = doc.pageBorder;
               return (
                 <div key={`${mount}-${page.id}`} className="wd-sheet">
-                  {view.rulers && view.mode === 'print' && <Ruler axis="x" length={metrics.width} start={doc.margins.left} end={doc.margins.right} />}
+                  {view.rulers && view.mode === 'print' && (
+                    <PageRuler
+                      axis="x"
+                      length={metrics.width}
+                      marginStart={doc.margins.left}
+                      marginEnd={doc.margins.right}
+                      paragraph={index === counts.page - 1 ? sel.blockStyle : null}
+                      editable={editable && index === counts.page - 1}
+                      onIndent={(styles) => applyBlockStyle(deskRef.current, styles)}
+                      onCommit={() => change()}
+                    />
+                  )}
                   <div className="wd-sheet-row">
-                    {view.vruler && view.mode === 'print' && <Ruler axis="y" length={metrics.height} start={doc.margins.top} end={doc.margins.bottom} />}
+                    {view.vruler && view.mode === 'print' && <PageRuler axis="y" length={metrics.height} marginStart={doc.margins.top} marginEnd={doc.margins.bottom} />}
                     <article
-                      className="wd-page"
+                      className={`wd-page${chromeEdit?.startsWith('header') ? ' is-header-open' : ''}${chromeEdit?.startsWith('footer') ? ' is-footer-open' : ''}`}
                       data-page-index={index}
                       style={{
                         width: metrics.width,
@@ -1076,15 +1268,20 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
                         padding: `${doc.margins.top}px ${doc.margins.right}px ${doc.margins.bottom}px ${doc.margins.left}px`,
                         background,
                         '--wd-body': `${bodyHeight(doc) - noteHeight}px`,
+                        '--wd-mt': `${doc.margins.top}px`,
+                        '--wd-mb': `${doc.margins.bottom}px`,
+                        '--wd-ml': `${doc.margins.left}px`,
+                        '--wd-mr': `${doc.margins.right}px`,
                         '--wd-chrome': `${HEADER_SPACE}px`,
+                        '--wd-band': '96px',
                       }}
                     >
                       {wm?.type === 'text' && wm.text && <div className="wd-watermark" aria-hidden="true" style={{ color: wm.color, opacity: wm.opacity, fontSize: wm.size, transform: `translate(-50%, -50%) rotate(${wm.rotate ?? -35}deg)` }}>{wm.text}</div>}
                       {wm?.type === 'image' && wm.image && <img className="wd-watermark-img" src={wm.image} alt="" aria-hidden="true" style={{ opacity: wm.opacity ?? 0.15, width: `${wm.scale || 50}%` }} />}
                       {border?.style && border.style !== 'none' && <div className="wd-page-border" aria-hidden="true" style={{ inset: border.offset ?? 24, border: `${border.width || 2}px ${border.style} ${border.color || '#1e293b'}`, borderRadius: border.radius || 0 }} />}
-                      <ChromeField field={headerKey} value={doc[headerKey]} placeholder={doc.differentFirst && index === 0 ? 'Encabezado de primera página' : headerKey === 'headerEven' ? 'Encabezado de página par' : 'Encabezado'} editable={editable} onInput={onChromeInput} />
+                      <ChromeField field={headerKey} value={doc[headerKey]} placeholder={doc.differentFirst && index === 0 ? 'Encabezado de primera página' : headerKey === 'headerEven' ? 'Encabezado de página par' : 'Encabezado'} editable={editable} editing={chromeEdit === headerKey} onInput={onChromeInput} />
                       <div className={`wd-body-wrap${doc.columns.count > 1 ? ' has-columns' : ''}`} style={{ '--wd-cols': doc.columns.count, '--wd-col-gap': `${doc.columns.gap}px`, '--wd-col-rule': doc.columns.divider ? '1px solid #cbd5e1' : 'none' }}>
-                        <PageBody pageId={page.id} html={page.html} editable={editable} spellcheck={view.spellcheck} lang={doc.language} />
+                        <PageBody pageId={page.id} html={page.html} editable={editable} spellcheck={view.spellcheck} lang={locale} />
                       </div>
                       {noteLines > 0 && (
                         <div className="wd-footnotes">
@@ -1094,7 +1291,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
                         </div>
                       )}
                       <div className="wd-footer">
-                        <ChromeField field={footerKey} value={doc[footerKey]} placeholder={footerKey === 'footerFirst' ? 'Pie de primera página' : footerKey === 'footerEven' ? 'Pie de página par' : 'Pie de página'} editable={editable} onInput={onChromeInput} />
+                        <ChromeField field={footerKey} value={doc[footerKey]} placeholder={footerKey === 'footerFirst' ? 'Pie de primera página' : footerKey === 'footerEven' ? 'Pie de página par' : 'Pie de página'} editable={editable} editing={chromeEdit === footerKey} onInput={onChromeInput} />
                         {doc.pageNumbers && <span className={`wd-page-no is-${doc.pageNumberAlign}`}>{doc.pageNumberFormat === 'page-of' ? `Página ${index + doc.pageNumberStart} de ${pages.length + doc.pageNumberStart - 1}` : formatPageNumber(index + doc.pageNumberStart, doc.pageNumberFormat)}</span>}
                       </div>
                       <InkLayer pageId={page.id} strokes={doc.ink[page.id] || []} width={metrics.width} height={paginate ? metrics.height : 1200} pen={pen} zoom={effectiveZoom} selected={inkSel.pageId === page.id ? inkSel.ids : []} onChange={onInkChange} onSelect={onInkSelect} />
@@ -1124,15 +1321,11 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       </div>
 
       <footer className="wd-status" aria-label="Barra de estado">
-        <button type="button" onClick={() => actions.goto()} title="Ir a página">Página {counts.page} de {pages.length}</button>
-        <button type="button" onClick={() => actions.wordCount()} title="Estadísticas">{counts.words.toLocaleString('es')} palabras</button>
-        <span className="wd-status-hide-sm">{counts.chars.toLocaleString('es')} caracteres</span>
-        <label className="wd-status-lang" title="Idioma">
-          <span className="sr-only">Idioma</span>
-          <select value={doc.language} onChange={(event) => patchDoc({ language: event.target.value })}>{LANGUAGES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>
-        </label>
+        <button type="button" className="wd-status-item" onClick={() => actions.goto()} title="Ir a página">Página {counts.page} de {pages.length}</button>
+        <button type="button" className="wd-status-item" onClick={() => actions.wordCount()} title="Estadísticas">{counts.words.toLocaleString('es')} palabras</button>
+        <span className="wd-status-item wd-status-hide-sm">{counts.chars.toLocaleString('es')} caracteres</span>
         {tracking && <span className="wd-status-chip">Control de cambios</span>}
-        <span className={`wd-status-save${status === 'error' ? ' is-error' : ''}`}>{statusLabel}</span>
+        <span className={`wd-status-save${status === 'error' ? ' is-error' : ''}`}>{statusIcon}{statusLabel}</span>
         <div className="wd-status-gap" />
         <div className="wd-status-modes" role="radiogroup" aria-label="Modo de visualización">
           {['read', 'print', 'web'].map((viewMode) => {
@@ -1140,10 +1333,43 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
             return <button key={viewMode} type="button" role="radio" aria-checked={view.mode === viewMode} className={view.mode === viewMode ? 'is-active' : ''} title={VIEW_MODES[viewMode].label} aria-label={VIEW_MODES[viewMode].label} onClick={() => setView({ mode: viewMode })}><ModeIcon size={14} /></button>;
           })}
         </div>
-        <button type="button" onClick={() => setView({ zoom: Math.max(0.2, effectiveZoom - 0.1), fit: null })} aria-label="Alejar">−</button>
-        <input type="range" min="0.2" max="3" step="0.05" value={effectiveZoom} aria-label="Zoom" onChange={(event) => setView({ zoom: Number(event.target.value), fit: null })} />
-        <button type="button" onClick={() => setView({ zoom: Math.min(3, effectiveZoom + 0.1), fit: null })} aria-label="Acercar">+</button>
-        <button type="button" className="wd-status-zoom" onClick={() => actions.zoomCustom()}>{Math.round(effectiveZoom * 100)}%</button>
+        <div className="wd-zoom" aria-label="Zoom">
+          <button type="button" aria-label="Alejar" onClick={() => setView({ zoom: Math.max(0.5, effectiveZoom - 0.1), fit: null })}>−</button>
+          <div
+            className="wd-zoom-track"
+            role="slider"
+            tabIndex={0}
+            aria-valuemin={50}
+            aria-valuemax={200}
+            aria-valuenow={Math.round(effectiveZoom * 100)}
+            aria-label="Zoom"
+            onPointerDown={(event) => {
+              const track = event.currentTarget;
+              const zoomAt = (clientX) => {
+                const rect = track.getBoundingClientRect();
+                const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+                setView({ zoom: 0.5 + ratio * 1.5, fit: null });
+              };
+              zoomAt(event.clientX);
+              const move = (ev) => zoomAt(ev.clientX);
+              const up = () => {
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+              };
+              window.addEventListener('pointermove', move);
+              window.addEventListener('pointerup', up);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowLeft') setView({ zoom: Math.max(0.5, effectiveZoom - 0.1), fit: null });
+              if (event.key === 'ArrowRight') setView({ zoom: Math.min(2, effectiveZoom + 0.1), fit: null });
+            }}
+          >
+            <span className="wd-zoom-fill" style={{ width: `${((Math.min(2, Math.max(0.5, effectiveZoom)) - 0.5) / 1.5) * 100}%` }} />
+            <span className="wd-zoom-thumb" style={{ left: `${((Math.min(2, Math.max(0.5, effectiveZoom)) - 0.5) / 1.5) * 100}%` }} />
+          </div>
+          <button type="button" aria-label="Acercar" onClick={() => setView({ zoom: Math.min(2, effectiveZoom + 0.1), fit: null })}>+</button>
+          <button type="button" className="wd-zoom-label" onClick={() => actions.zoomCustom()}>{Math.round(effectiveZoom * 100)}%</button>
+        </div>
       </footer>
 
       {(view.mode === 'read' || view.mode === 'focus') && (
@@ -1154,7 +1380,6 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       <ContextMenu menu={menu} onClose={() => setMenu(null)} />
       <InlineMenu menu={inline} items={inlineItems} active={inlineActive} onPick={pickInline} onHover={setInlineActive} />
       <DocDialog dialog={dialog} onClose={() => setDialog(null)} />
-      {backstage && <FileBackstage section={backstage} setSection={setBackstage} onClose={() => setBackstage(null)} actions={actions} api={api} doc={doc} meta={meta} user={user} hojaId={hojaId} counts={counts} pages={pages} name={name} autosave={autosave} />}
       {fileInput}
       <span className="sr-only" aria-live="polite">{statusLabel}</span>
     </div>

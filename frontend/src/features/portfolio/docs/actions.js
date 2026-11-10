@@ -1109,15 +1109,8 @@ export function createActions(ctx) {
   };
 
   // ---------- Encabezados y pies ----------
-  const focusChrome = (kind) => {
-    const field = D().querySelector(`[data-chrome^="${kind}"]`);
-    if (!field) return;
-    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    field.focus();
-    placeCaret(field, false);
-  };
-  actions.editHeader = () => focusChrome('header');
-  actions.editFooter = () => focusChrome('footer');
+  actions.editHeader = () => ctx.openChrome('header');
+  actions.editFooter = () => ctx.openChrome('footer');
   actions.pageNumbers = async () => {
     const current = doc();
     const values = await ctx.ask({ title: 'Número de página', fields: [{ name: 'show', label: 'Mostrar número de página', type: 'checkbox', value: current.pageNumbers }, { name: 'format', label: 'Formato', type: 'select', value: current.pageNumberFormat, options: [['arabic', '1, 2, 3'], ['dash', '- 1 -, - 2 -'], ['roman', 'i, ii, iii'], ['ROMAN', 'I, II, III'], ['alpha', 'a, b, c'], ['page-of', 'Página X de Y']] }, { name: 'start', label: 'Empezar en', type: 'number', value: current.pageNumberStart, min: 0 }, { name: 'align', label: 'Posición', type: 'select', value: current.pageNumberAlign, options: [['left', 'Izquierda'], ['center', 'Centro'], ['right', 'Derecha']] }] });
@@ -2044,8 +2037,8 @@ export function createActions(ctx) {
       const result = parseJson(await ctx.ai('detect-language', { text: words.slice(0, 300).join(' ') }));
       if (result?.language) best = result.language;
     }
-    ctx.patchDoc({ language: best }, { noReflow: true });
-    toast.success(`Idioma detectado: ${best}`);
+    const name = { es: 'Español', en: 'English' }[best] || best;
+    toast.success(`Idioma detectado: ${name}. El documento usa el idioma de Ajustes.`);
   };
   actions.translate = async (scope, language) => {
     if (scope === 'selection') {

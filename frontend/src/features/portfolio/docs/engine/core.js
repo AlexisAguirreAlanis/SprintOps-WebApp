@@ -6,7 +6,32 @@ export const BODY_SELECTOR = '[data-page-body]';
 export const EDITABLE_SELECTOR = '[data-page-body], .wd-chrome';
 
 let saved = null;
+let holding = false;
 let multi = [];
+
+function paintHold() {
+  if (!saved || saved.collapsed || typeof Highlight === 'undefined' || !CSS?.highlights) return;
+  try { CSS.highlights.set('wd-hold', new Highlight(saved)); } catch { /* el navegador no pinta highlights */ }
+}
+
+export function clearHold() {
+  holding = false;
+  try { CSS.highlights?.delete('wd-hold'); } catch { /* ignore */ }
+}
+
+export function selectionHeld() {
+  return holding;
+}
+
+/** Conserva la selección mientras el foco pasa a la cinta o a un campo de la barra. */
+export function holdSelection(desk) {
+  const range = rangeIn(desk);
+  if (range && !range.collapsed) saved = range.cloneRange();
+  if (saved && !saved.collapsed) {
+    holding = true;
+    paintHold();
+  }
+}
 
 export function selection() {
   return document.getSelection();
@@ -21,7 +46,9 @@ export function rangeIn(desk) {
 
 export function rememberSelection(desk) {
   const range = rangeIn(desk);
-  if (range) saved = range.cloneRange();
+  if (!range) return;
+  if (holding && range.collapsed && saved && !saved.collapsed) return;
+  saved = range.cloneRange();
 }
 
 export function savedRange() {
@@ -35,11 +62,16 @@ export function hostOf(node) {
 
 export function restoreSelection(desk) {
   const sel = selection();
-  if (rangeIn(desk) && hostOf(sel.anchorNode)) return true;
+  if (rangeIn(desk) && hostOf(sel.anchorNode)) {
+    clearHold();
+    return true;
+  }
   if (saved && desk?.contains(saved.startContainer)) {
-    hostOf(saved.startContainer)?.focus({ preventScroll: true });
+    const host = hostOf(saved.startContainer);
+    host?.focus({ preventScroll: true });
     sel.removeAllRanges();
     sel.addRange(saved);
+    if (host && document.activeElement && host.contains(document.activeElement)) clearHold();
     return true;
   }
   const body = desk?.querySelector(BODY_SELECTOR);

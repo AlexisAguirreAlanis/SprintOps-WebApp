@@ -204,9 +204,17 @@ export function TableTab({ api }) {
           <Menu icon={PenLine} label="Bordes" text="Bordes" width={240}>
             {(close) => (
               <>
-                {[['all', 'Todos los bordes'], ['outer', 'Bordes externos'], ['inner', 'Bordes internos'], ['none', 'Sin bordes']].map(([mode, label]) => <Item key={mode} label={label} close={close} onClick={() => api.run('tableBorders', { mode })} />)}
+                {[['all', 'Todos los bordes'], ['outer', 'Bordes externos'], ['inner', 'Bordes internos'], ['none', 'Sin bordes']].map(([mode, label]) => (
+                  <Item key={mode} close={close} onClick={() => api.run('tableBorders', { mode })}>
+                    <span className="wd-border-choice"><i className={`wd-border-mini is-${mode}`} />{label}</span>
+                  </Item>
+                ))}
                 <Sep label="Estilo de pluma" />
-                {[['solid', 'Continuo'], ['dashed', 'Discontinuo'], ['dotted', 'Punteado'], ['double', 'Doble']].map(([style, label]) => <Item key={style} label={label} active={api.borderPen.style === style} onClick={() => api.setBorderPen({ style })} />)}
+                {[['solid', 'Continuo'], ['dashed', 'Discontinuo'], ['dotted', 'Punteado'], ['double', 'Doble']].map(([style, label]) => (
+                  <Item key={style} active={api.borderPen.style === style} onClick={() => api.setBorderPen({ style })}>
+                    <span className="wd-border-choice">{label}<i className="wd-border-sample" style={{ borderTopStyle: style }} /></span>
+                  </Item>
+                ))}
                 <div className="wd-pad"><NumberField label="Grosor" value={api.borderPen.width} min={1} max={8} suffix="px" width={90} onChange={(width) => api.setBorderPen({ width })} /></div>
                 <Sep label="Color de borde" />
                 <ColorGrid value={api.borderPen.color} onPick={(color) => api.setBorderPen({ color })} />

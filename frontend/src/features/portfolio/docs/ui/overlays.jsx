@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlignCenter, AlignLeft, AlignRight, Bold, Highlighter, Italic, Link2, MessageSquarePlus, Palette, Sparkles, Strikethrough, Underline } from 'lucide-react';
+import { Bold, Highlighter, Italic, Palette, Strikethrough, Underline } from 'lucide-react';
 import { applyTransform } from '../engine/objects';
-import { Btn, ColorGrid, Menu } from './controls';
+import { holdSelection } from '../engine/core';
+import { SIZES } from '../ribbon/HomeTab';
+import { Btn, ColorGrid, FontField, Menu, Select } from './controls';
 
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -104,30 +106,18 @@ export function ObjectHandles({ el, deskEl, zoom, version, onChange, onCommit })
 /** Barra flotante sobre el texto seleccionado. */
 export function BubbleBar({ rect, sel, api }) {
   if (!rect) return null;
-  const top = Math.max(8, rect.top - 46);
-  const left = Math.min(window.innerWidth - 420, Math.max(8, rect.left + rect.width / 2 - 200));
+  const top = Math.max(8, rect.top - 48);
+  const left = Math.min(window.innerWidth - 440, Math.max(8, rect.left));
   return createPortal(
-    <div className="wd-bubble" style={{ top, left }} role="toolbar" aria-label="Formato rápido" onMouseDown={(event) => event.preventDefault()}>
+    <div className="wd-bubble" style={{ top, left }} role="toolbar" aria-label="Formato rápido" onMouseDown={(event) => { if (event.target.closest('input, textarea')) { holdSelection(document.querySelector('.wd-desk')); return; } event.preventDefault(); }}>
+      <FontField value={sel.font || ''} onChange={(value) => value && api.inline({ fontFamily: value })} />
+      <Select className="is-size" label="Tamaño" width={58} value={String(sel.size || '')} options={[['', sel.size ? String(sel.size) : '—'], ...SIZES.map((size) => [String(size), String(size)])]} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
       <Btn icon={Bold} label="Negrita" active={sel.bold} onClick={() => api.cmd('bold')} />
       <Btn icon={Italic} label="Cursiva" active={sel.italic} onClick={() => api.cmd('italic')} />
       <Btn icon={Underline} label="Subrayado" active={sel.underline} onClick={() => api.cmd('underline')} />
       <Btn icon={Strikethrough} label="Tachado" active={sel.strike} onClick={() => api.cmd('strikeThrough')} />
-      <select className="wd-bubble-select" aria-label="Fuente" value="" onChange={(event) => api.inline({ fontFamily: event.target.value })}>
-        <option value="" disabled>Fuente</option>
-        {api.fonts.map(([value, label]) => <option key={label} value={value}>{label}</option>)}
-      </select>
-      <select className="wd-bubble-select is-small" aria-label="Tamaño" value="" onChange={(event) => api.inline({ fontSize: `${event.target.value}px` })}>
-        <option value="" disabled>{sel.size || 'Tam.'}</option>
-        {[10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48].map((size) => <option key={size} value={size}>{size}</option>)}
-      </select>
-      <Menu icon={Palette} label="Color de texto" width={210}>{(close) => <ColorGrid onPick={(color) => api.inline({ color })} close={close} />}</Menu>
-      <Menu icon={Highlighter} label="Resaltado" width={210}>{(close) => <ColorGrid allowNone onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
-      <Btn icon={AlignLeft} label="Izquierda" onClick={() => api.cmd('justifyLeft')} />
-      <Btn icon={AlignCenter} label="Centrar" onClick={() => api.cmd('justifyCenter')} />
-      <Btn icon={AlignRight} label="Derecha" onClick={() => api.cmd('justifyRight')} />
-      <Btn icon={Link2} label="Hipervínculo" onClick={() => api.run('link')} />
-      <Btn icon={MessageSquarePlus} label="Comentario" onClick={() => api.run('comment')} />
-      <Btn icon={Sparkles} label="IA" onClick={() => api.openRight('ai')} />
+      <Menu icon={Palette} label="Color de texto" width={248}>{(close) => <ColorGrid value={sel.color} onPick={(color) => api.inline({ color })} close={close} />}</Menu>
+      <Menu icon={Highlighter} label="Resaltado" width={196}>{(close) => <ColorGrid kind="highlight" allowNone noneLabel="Sin color" onPick={(color) => api.inline({ backgroundColor: color || 'transparent' })} close={close} />}</Menu>
     </div>,
     document.body,
   );
