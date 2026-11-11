@@ -9,6 +9,120 @@ export const TABLE_STYLES = [
   { id: 'dark', label: 'Oscura' },
 ];
 
+const DRAW_INK = '1.5px solid #334155';
+
+function overlaps(a0, a1, b0, b1) {
+  return Math.min(a1, b1) - Math.max(a0, b0);
+}
+
+/** Tabla de una celda, del tamaño del trazo. */
+export function placeDrawnTable(anchor, width, height) {
+  const host = document.createElement('div');
+  host.innerHTML = tableHtml(1, 1, { header: false, style: 'plain' });
+  const table = host.querySelector('table');
+  table.classList.add('wd-drawn');
+  const w = Math.max(64, Math.round(width));
+  const h = Math.max(36, Math.round(height));
+  table.style.width = `${w}px`;
+  table.style.height = `${h}px`;
+  const cell = table.querySelector('td');
+  if (cell) {
+    cell.style.height = `${h}px`;
+    cell.style.border = DRAW_INK;
+  }
+  const block = anchor?.closest?.('p, h1, h2, h3, h4, h5, h6, li, blockquote') || null;
+  if (block?.parentElement) block.after(...host.childNodes);
+  else if (anchor?.append) anchor.append(...host.childNodes);
+  return table;
+}
+
+/**
+ * Parte las celdas que cruza el trazo. Una línea horizontal abre una fila
+ * solo en esas celdas; el resto de la fila conserva el alto. Igual en vertical.
+ */
+export function paintDivider(table, { x0, y0, x1, y1 }) {
+  if (Math.hypot(x1 - x0, y1 - y0) < 14) return false;
+  table.style.borderCollapse = 'collapse';
+  const horizontal = Math.abs(x1 - x0) >= Math.abs(y1 - y0);
+  return horizontal
+    ? paintRow(table, (y0 + y1) / 2, Math.min(x0, x1), Math.max(x0, x1))
+    : paintColumn(table, (x0 + x1) / 2, Math.min(y0, y1), Math.max(y0, y1));
+}
+
+function paintRow(table, y, x0, x1) {
+  const row = [...table.rows].find((item) => {
+    const box = item.getBoundingClientRect();
+    return y > box.top + 7 && y < box.bottom - 7;
+  });
+  if (!row) return false;
+  const box = row.getBoundingClientRect();
+  const fraction = (y - box.top) / Math.max(1, box.height);
+  if (fraction < 0.18 || fraction > 0.82) return false;
+  const cells = [...row.cells];
+  const hits = cells.filter((cell) => overlaps(x0, x1, cell.getBoundingClientRect().left, cell.getBoundingClientRect().right) > 10 && cell.rowSpan === 1);
+  if (!hits.length) return false;
+  const fresh = document.createElement('tr');
+  const top = Math.max(22, Math.round(row.offsetHeight * fraction));
+  const below = Math.max(22, row.offsetHeight - top);
+  row.style.height = `${top}px`;
+  fresh.style.height = `${below}px`;
+  table.style.height = 'auto';
+  cells.forEach((cell) => {
+    if (!hits.includes(cell)) {
+      cell.rowSpan += 1;
+      return;
+    }
+    const next = newCell('td');
+    next.style.border = DRAW_INK;
+    next.style.height = `${below}px`;
+    cell.style.height = `${top}px`;
+    cell.style.borderBottom = DRAW_INK;
+    fresh.append(next);
+  });
+  if (!fresh.cells.length) return false;
+  row.after(fresh);
+  return true;
+}
+
+function paintColumn(table, x, y0, y1) {
+  const origin = [...table.querySelectorAll('td, th')].find((cell) => {
+    const box = cell.getBoundingClientRect();
+    return x > box.left + 7 && x < box.right - 7;
+  });
+  if (!origin) return false;
+  const fraction = (x - origin.getBoundingClientRect().left) / Math.max(1, origin.getBoundingClientRect().width);
+  if (fraction < 0.18 || fraction > 0.82) return false;
+  const { c } = position(table, origin);
+  const grid = gridOf(table);
+  const seen = new Set();
+  const jobs = [];
+  grid.forEach((line) => {
+    const cell = line[c];
+    if (!cell || seen.has(cell)) return;
+    seen.add(cell);
+    const box = cell.getBoundingClientRect();
+    const crosses = overlaps(y0, y1, box.top, box.bottom) > 10 && cell.colSpan === 1;
+    jobs.push({ cell, split: crosses });
+  });
+  if (!jobs.some((job) => job.split)) return false;
+  jobs.forEach((job) => {
+    if (!job.split) {
+      job.cell.colSpan += 1;
+      return;
+    }
+    const width = job.cell.offsetWidth;
+    const left = Math.max(24, Math.round(width * fraction));
+    const right = Math.max(24, Math.round(width - left));
+    const next = newCell('td');
+    next.style.border = DRAW_INK;
+    next.style.width = `${right}px`;
+    job.cell.style.width = `${left}px`;
+    job.cell.style.borderRight = DRAW_INK;
+    job.cell.after(next);
+  });
+  return true;
+}
+
 export function tableHtml(rows, cols, { header = true, style = 'grid' } = {}) {
   const cells = (tag) => Array.from({ length: cols }, () => `<${tag}><br></${tag}>`).join('');
   const body = Array.from({ length: rows }, (_, index) => `<tr>${cells(index === 0 && header ? 'th' : 'td')}</tr>`).join('');

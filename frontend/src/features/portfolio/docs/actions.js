@@ -90,6 +90,52 @@ const parseJson = (text) => {
 const cm = (px) => Math.round((px / 96) * 2.54 * 100) / 100;
 const px = (centimeters) => Math.round((Number(centimeters) / 2.54) * 96);
 
+function clearDropCap(node) {
+  node.querySelectorAll('.wd-dropcap-letter').forEach((span) => span.replaceWith(document.createTextNode(span.textContent || '')));
+  node.normalize();
+  node.classList.remove('wd-dropcap');
+  delete node.dataset.dropcap;
+  node.style.removeProperty('--wd-drop-lines');
+  node.style.removeProperty('--wd-drop-color');
+}
+
+function wrapDropCap(node) {
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  let text = walker.nextNode();
+  while (text && ![...text.data].some((char) => char.trim())) text = walker.nextNode();
+  if (!text) return false;
+  const chars = [...text.data];
+  const index = chars.findIndex((char) => char.trim());
+  const span = document.createElement('span');
+  span.className = 'wd-dropcap-letter';
+  span.textContent = chars[index];
+  const before = chars.slice(0, index).join('');
+  const after = chars.slice(index + 1).join('');
+  if (before) text.parentNode.insertBefore(document.createTextNode(before), text);
+  text.parentNode.insertBefore(span, text);
+  if (after) text.data = after;
+  else text.remove();
+  return true;
+}
+
+/** Convierte letras capitales antiguas en un carácter real, seleccionable y del color que ya tenía. */
+export function materializeDropCaps(root) {
+  root?.querySelectorAll('p.wd-dropcap').forEach((node) => {
+    if (node.querySelector('.wd-dropcap-letter')) {
+      node.style.removeProperty('--wd-drop-color');
+      return;
+    }
+    const mode = node.dataset.dropcap === 'margin' ? 'margin' : 'dropped';
+    const lines = node.style.getPropertyValue('--wd-drop-lines');
+    clearDropCap(node);
+    if (!wrapDropCap(node)) return;
+    node.classList.add('wd-dropcap');
+    node.dataset.dropcap = mode;
+    if (lines) node.style.setProperty('--wd-drop-lines', lines);
+    else node.style.setProperty('--wd-drop-lines', '3');
+  });
+}
+
 export function createActions(ctx) {
   const D = () => ctx.desk();
   const doc = () => ctx.doc();
@@ -699,12 +745,14 @@ export function createActions(ctx) {
     const table = nodes?.find((node) => node.tagName === 'TABLE');
     if (table) { if (values.fit === 'fixed') T.distributeColumns(table); else T.autofit(table, values.fit); }
   };
-  actions.drawTable = async () => {
+  actions.drawTable = () => {
     if (!editable()) return;
-    const values = await ctx.ask({ title: 'Dibujar tabla', description: 'Define la cuadrícula y el trazo; después combina o divide celdas desde la pestaña Diseño de tabla.', fields: [{ name: 'rows', label: 'Filas', type: 'number', value: 4, min: 1 }, { name: 'cols', label: 'Columnas', type: 'number', value: 4, min: 1 }, { name: 'color', label: 'Color del trazo', type: 'color', value: '#1e293b' }, { name: 'width', label: 'Grosor', type: 'number', value: 1.5, step: 0.5 }, { name: 'style', label: 'Estilo', type: 'select', value: 'solid', options: [['solid', 'Continuo'], ['dashed', 'Discontinuo'], ['dotted', 'Punteado'], ['double', 'Doble']] }] });
-    if (!values) return;
-    const table = block(T.tableHtml(values.rows, values.cols, { header: false, style: 'plain' }))?.find((node) => node.tagName === 'TABLE');
-    if (table) { T.setBorders(table, [], { mode: 'all', color: values.color, width: values.width, style: values.style }); ctx.change(); }
+    if (ctx.pen()?.tool === 'table') {
+      ctx.setPen({ tool: null });
+      return;
+    }
+    ctx.setPen({ tool: 'table' });
+    toast.info('Arrastra para crear la tabla. Dentro de una celda, traza una línea para dividirla. Esc para salir.');
   };
   actions.textToTable = async () => {
     if (!editable()) return;
@@ -975,24 +1023,24 @@ export function createActions(ctx) {
   actions.wordart = async (el) => {
     if (!editable()) return;
     const spec = el ? readSpec(el) : { text: 'Tu texto aquí', style: 'gradient', size: 56, font: '"Avenir Next", Avenir, sans-serif' };
-    const values = await ctx.ask({ title: 'WordArt', fields: [{ name: 'text', label: 'Texto', value: spec.text, full: true }, { name: 'style', label: 'Estilo', type: 'select', value: spec.style, options: Object.entries(WORDART_STYLES).map(([id, style]) => [id, style.label]) }, { name: 'size', label: 'Tamaño (px)', type: 'number', value: spec.size, min: 16, max: 200 }, { name: 'font', label: 'Fuente', type: 'select', value: spec.font, options: FONTS }] });
+    const values = await ctx.ask({ title: 'Texto decorado', fields: [{ name: 'text', label: 'Texto', value: spec.text, full: true }, { name: 'style', label: 'Estilo', type: 'select', value: spec.style, options: Object.entries(WORDART_STYLES).map(([id, style]) => [id, style.label]) }, { name: 'size', label: 'Tamaño (px)', type: 'number', value: spec.size, min: 16, max: 200 }, { name: 'font', label: 'Fuente', type: 'select', value: spec.font, options: FONTS }] });
     if (!values) return;
     const next = { ...spec, ...values, size: Number(values.size) };
     const width = Math.min(bodyWidth(), Math.round(next.text.length * next.size * 0.62) + 40);
     if (el) { updateObject(el, next); el.style.width = `${width}px`; el.style.height = `${Math.round(next.size * 1.5)}px`; ctx.change(); } else insert(objectHtml('wordart', next, { width, height: Math.round(next.size * 1.5) }));
   };
-  actions.dropCap = async () => {
+  actions.dropCap = (mode = 'dropped') => {
     if (!editable()) return;
     restoreSelection(D());
     const node = currentBlock(D());
     if (!node || node.tagName !== 'P') return toast.info('Coloca el cursor en un párrafo.');
-    const values = await ctx.ask({ title: 'Letra capital', fields: [{ name: 'mode', label: 'Posición', type: 'select', value: node.dataset.dropcap || 'dropped', options: [['none', 'Ninguna'], ['dropped', 'En texto'], ['margin', 'En margen']] }, { name: 'lines', label: 'Líneas que ocupa', type: 'number', value: Number(node.style.getPropertyValue('--wd-drop-lines')) || 3, min: 2, max: 6 }, { name: 'color', label: 'Color', type: 'color', value: '#2f6f5e' }] });
-    if (!values) return;
-    if (values.mode === 'none') { delete node.dataset.dropcap; node.classList.remove('wd-dropcap'); } else {
+    const lines = node.style.getPropertyValue('--wd-drop-lines');
+    clearDropCap(node);
+    if (mode !== 'none') {
+      if (!wrapDropCap(node)) return toast.info('El párrafo no tiene una letra para agrandar.');
       node.classList.add('wd-dropcap');
-      node.dataset.dropcap = values.mode;
-      node.style.setProperty('--wd-drop-lines', values.lines);
-      node.style.setProperty('--wd-drop-color', values.color);
+      node.dataset.dropcap = mode === 'margin' ? 'margin' : 'dropped';
+      node.style.setProperty('--wd-drop-lines', lines || '3');
     }
     ctx.change();
   };
@@ -1003,14 +1051,19 @@ export function createActions(ctx) {
     if (!values) return;
     if (el) { updateObject(el, values); ctx.change(); } else insert(objectHtml('signature', values, { width: 300, height: 120 }));
   };
-  actions.dateTime = async () => {
+  actions.dateTime = (format = 'long') => {
     if (!editable()) return;
     const now = new Date();
-    const formats = [['long', new Intl.DateTimeFormat('es', { dateStyle: 'long' }).format(now)], ['full', new Intl.DateTimeFormat('es', { dateStyle: 'full' }).format(now)], ['medium', new Intl.DateTimeFormat('es', { dateStyle: 'medium' }).format(now)], ['short', new Intl.DateTimeFormat('es', { dateStyle: 'short' }).format(now)], ['time', new Intl.DateTimeFormat('es', { timeStyle: 'short' }).format(now)], ['datetime', new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' }).format(now)], ['iso', now.toISOString().slice(0, 10)]];
-    const values = await ctx.ask({ title: 'Fecha y hora', fields: [{ name: 'format', label: 'Formato', type: 'select', value: 'long', options: formats.map(([id, text]) => [id, text]) }, { name: 'auto', label: 'Actualizar automáticamente', type: 'checkbox', value: false }] });
-    if (!values) return;
-    if (values.auto && values.format !== 'iso') insert(values.format === 'time' ? fieldHtml('time', formats[4][1]) : `<span class="wd-field" contenteditable="false" data-field="date" data-format="${values.format === 'datetime' ? 'medium' : values.format}">${escapeHtml(formats.find(([id]) => id === values.format)[1])}</span>&nbsp;`);
-    else insert(escapeHtml(formats.find(([id]) => id === values.format)[1]));
+    const formats = {
+      long: new Intl.DateTimeFormat('es', { dateStyle: 'long' }).format(now),
+      full: new Intl.DateTimeFormat('es', { dateStyle: 'full' }).format(now),
+      medium: new Intl.DateTimeFormat('es', { dateStyle: 'medium' }).format(now),
+      short: new Intl.DateTimeFormat('es', { dateStyle: 'short' }).format(now),
+      time: new Intl.DateTimeFormat('es', { timeStyle: 'short' }).format(now),
+      datetime: new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' }).format(now),
+      iso: now.toISOString().slice(0, 10),
+    };
+    insert(escapeHtml(formats[format] || formats.long));
   };
   actions.field = (field) => {
     const labels = { date: 'fecha', time: 'hora', title: ctx.name, author: doc().properties?.author || ctx.meta?.ownerName || 'autor', page: '#', pages: '#', words: '0', updated: '' };
@@ -1044,14 +1097,15 @@ export function createActions(ctx) {
     ctx.storage.set('quickParts', [...ctx.storage.get('quickParts', []), { id: uid('qp'), name: values.name, html }]);
     toast.success('Guardado. Lo encontrarás en Insertar › Elementos rápidos.');
   };
-  actions.equation = async (el) => {
+  actions.applyEquation = async (tex, inline, el) => {
+    if (!editable() || !String(tex || '').trim()) return;
+    const html = await renderTex(tex, !inline);
+    const node = `<${inline ? 'span' : 'div'} class="wd-eq" contenteditable="false" data-tex="${escapeHtml(tex)}">${html}</${inline ? 'span' : 'div'}>`;
+    if (el?.isConnected) { el.outerHTML = node; ctx.change(); } else if (inline) insert(`${node}&nbsp;`); else block(node);
+  };
+  actions.equation = (el) => {
     if (!editable()) return;
-    const tex = el?.dataset?.tex || '';
-    const result = await ctx.dialog('Ecuación (LaTeX)', ({ close }) => h(EquationEditor, { initial: tex, inline: el?.tagName === 'SPAN', close }), 'max-w-2xl');
-    if (!result) return;
-    const html = await renderTex(result.tex, !result.inline);
-    const node = `<${result.inline ? 'span' : 'div'} class="wd-eq" contenteditable="false" data-tex="${escapeHtml(result.tex)}">${html}</${result.inline ? 'span' : 'div'}>`;
-    if (el) { el.outerHTML = node; ctx.change(); } else if (result.inline) insert(`${node}&nbsp;`); else block(node);
+    window.dispatchEvent(new CustomEvent('wd-equation', { detail: el || null }));
   };
   actions.mermaid = async (el) => {
     if (!editable()) return;
@@ -2614,24 +2668,6 @@ function IconPicker({ library, onPick, close }) {
     h('div', { className: 'wd-dialog-actions' }, h('button', { type: 'button', className: 'ps-quiet', onClick: () => close(null) }, 'Cerrar')));
 }
 
-function EquationEditor({ initial, inline, close }) {
-  const [tex, setTex] = useStateShim(initial || 'E = mc^2');
-  const [isInline, setInline] = useStateShim(Boolean(inline));
-  const [preview, setPreview] = useStateShim('');
-  useEffectShim(() => {
-    let alive = true;
-    renderTex(tex, !isInline).then((html) => { if (alive) setPreview(html); });
-    return () => { alive = false; };
-  }, [tex, isInline]);
-  const snippets = [['Fracción', '\\frac{a}{b}'], ['Raíz', '\\sqrt{x}'], ['Potencia', 'x^{n}'], ['Subíndice', 'x_{i}'], ['Suma', '\\sum_{i=1}^{n} x_i'], ['Integral', '\\int_{a}^{b} f(x)\\,dx'], ['Límite', '\\lim_{x \\to \\infty}'], ['Matriz', '\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}'], ['Griega', '\\alpha \\beta \\gamma \\pi'], ['Cuadrática', 'x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}']];
-  return h('div', { className: 'wd-eq-editor' },
-    h('div', { className: 'wd-chip-row' }, snippets.map(([label, code]) => h('button', { key: label, type: 'button', className: 'wd-chip', onClick: () => setTex((value) => `${value} ${code}`.trim()) }, label))),
-    h('textarea', { className: 'wd-input wd-mono', rows: 4, value: tex, onChange: (event) => setTex(event.target.value), 'aria-label': 'LaTeX' }),
-    h('label', { className: 'wd-field-inline' }, h('input', { type: 'checkbox', checked: isInline, onChange: (event) => setInline(event.target.checked) }), ' En línea con el texto'),
-    h('div', { className: 'wd-eq-preview', dangerouslySetInnerHTML: { __html: preview } }),
-    h('div', { className: 'wd-dialog-actions' }, h('button', { type: 'button', className: 'ps-quiet', onClick: () => close(null) }, 'Cancelar'), h('button', { type: 'button', className: 'wd-primary', onClick: () => close({ tex, inline: isInline }) }, 'Insertar')));
-}
-
 function QuickParts({ storage, onInsert, close }) {
   const [parts, setParts] = useStateShim(storage.get('quickParts', []));
   const remove = (id) => { const next = parts.filter((part) => part.id !== id); setParts(next); storage.set('quickParts', next); };
@@ -2669,7 +2705,7 @@ function SourceManager({ sources, ask, onChange, close }) {
 function SelectionPane({ desk, onSelect, onChange, close }) {
   const [, setTick] = useStateShim(0);
   const objects = [...desk.querySelectorAll('[data-page-body] figure.wd-obj, [data-page-body] img')].filter((el) => !el.parentElement.closest('figure.wd-group'));
-  const name = (el) => (el.tagName === 'IMG' ? `Imagen ${el.alt || ''}` : `${{ shape: 'Forma', chart: 'Gráfico', diagram: 'SmartArt', textbox: 'Cuadro de texto', wordart: 'WordArt', icon: 'Icono', group: 'Grupo', signature: 'Firma', image: 'Imagen' }[el.dataset.kind] || 'Objeto'}${el.dataset.kind === 'shape' ? ` · ${SHAPES[readSpec(el).type]?.label || ''}` : ''}`);
+  const name = (el) => (el.tagName === 'IMG' ? `Imagen ${el.alt || ''}` : `${{ shape: 'Forma', chart: 'Gráfico', diagram: 'SmartArt', textbox: 'Cuadro de texto', wordart: 'Texto decorado', icon: 'Icono', group: 'Grupo', signature: 'Firma', image: 'Imagen' }[el.dataset.kind] || 'Objeto'}${el.dataset.kind === 'shape' ? ` · ${SHAPES[readSpec(el).type]?.label || ''}` : ''}`);
   return h('div', null,
     objects.length ? h('div', { className: 'wd-list' }, objects.map((el, index) => h('div', { key: index, className: 'wd-list-row' },
       h('button', { type: 'button', className: 'wd-item', onClick: () => { onSelect(el); close(); } }, `${index + 1}. ${name(el)}`),

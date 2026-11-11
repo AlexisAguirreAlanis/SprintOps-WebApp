@@ -146,9 +146,9 @@ export function Btn({ icon: Icon, label, onClick, active = false, disabled = fal
   );
 }
 
-export function Group({ label, children, grow = false }) {
+export function Group({ label, children, grow = false, weight }) {
   return (
-    <div className={`wd-group${grow ? ' is-grow' : ''}`} role="group" aria-label={label}>
+    <div className={`wd-group${grow ? ' is-grow' : ''}`} style={weight ? { flexGrow: weight } : undefined} role="group" aria-label={label}>
       <div className="wd-group-body">{children}</div>
       <span className="wd-group-label">{label}</span>
     </div>
@@ -160,13 +160,22 @@ export function Row({ children }) {
 }
 
 /** Menú desplegable que se pinta en un portal para no recortarse dentro de la cinta. */
-export function Menu({ icon: Icon, label, text, children, wide = false, active = false, width = 240, limit = 360, menuClass = '', scroll = false, disabled = false, title, mark = '' }) {
-  const [open, setOpen] = useState(false);
+export function Menu({ icon: Icon, label, text, children, wide = false, active = false, width = 240, limit = 360, menuClass = '', scroll = false, bare = false, disabled = false, title, mark = '', opened, onOpenChange }) {
+  const [innerOpen, setInnerOpen] = useState(false);
+  const controlled = opened !== undefined;
+  const open = controlled ? opened : innerOpen;
+  const openRef = useRef(open);
+  openRef.current = open;
+  const setOpen = useCallback((value) => {
+    const next = typeof value === 'function' ? value(openRef.current) : value;
+    if (!controlled) setInnerOpen(next);
+    onOpenChange?.(next);
+  }, [controlled, onOpenChange]);
   const [alive, setAlive] = useState(false);
   const [pos, setPos] = useState(null);
   const anchor = useRef(null);
   const panel = useRef(null);
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => setOpen(false), [setOpen]);
 
   useEffect(() => {
     if (open) {
@@ -245,8 +254,10 @@ export function Menu({ icon: Icon, label, text, children, wide = false, active =
         <ChevronDown size={12} className="wd-caret" aria-hidden="true" />
       </button>
       {alive && pos && createPortal(
-        <div ref={panel} className={`wd-pop is-clamped${menuClass ? ` ${menuClass}` : ''}${open ? '' : ' is-out'}`} role="menu" style={{ left: pos.left, width, maxHeight: pos.maxHeight, ...(pos.up ? { top: 'auto', bottom: pos.bottom } : { top: pos.top }) }} onMouseDown={(event) => { if (!event.target.closest('input, textarea, select')) event.preventDefault(); }}>
-          <ScrollPane maxHeight={Math.max(80, pos.maxHeight - 8)}>{typeof children === 'function' ? children(close) : children}</ScrollPane>
+        <div ref={panel} className={`wd-pop is-clamped${bare ? ' is-bare' : ''}${menuClass ? ` ${menuClass}` : ''}${open ? '' : ' is-out'}`} role="menu" style={{ left: pos.left, width, maxHeight: pos.maxHeight, ...(pos.up ? { top: 'auto', bottom: pos.bottom } : { top: pos.top }) }} onMouseDown={(event) => { if (!event.target.closest('input, textarea, select, .wd-symbol-tabs, .wd-eq-panel')) event.preventDefault(); }}>
+          {bare ? (typeof children === 'function' ? children(close) : children) : (
+            <ScrollPane maxHeight={Math.max(80, pos.maxHeight - 8)}>{typeof children === 'function' ? children(close) : children}</ScrollPane>
+          )}
         </div>,
         document.body,
       )}
@@ -452,20 +463,26 @@ export function NumberField({ label, value, onChange, min = -9999, max = 9999, s
   );
 }
 
-export function GridPicker({ onPick, close, max = 10 }) {
+export function GridPicker({ onPick, close, cols = 10, rows = 8 }) {
   const [hover, setHover] = useState([0, 0]);
   return (
-    <div className="wd-gridpick">
-      <div className="wd-gridpick-cells" onMouseLeave={() => setHover([0, 0])}>
-        {Array.from({ length: max * max }, (_, index) => {
-          const r = Math.floor(index / max) + 1;
-          const c = (index % max) + 1;
+    <div className="wd-gridpick" onMouseLeave={() => setHover([0, 0])}>
+      <div className="wd-gridpick-head">
+        <strong>Insertar tabla</strong>
+        <span>{hover[0] ? `${hover[0]} × ${hover[1]}` : 'Elige el tamaño'}</span>
+      </div>
+      <div className="wd-gridpick-cells" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+        {Array.from({ length: rows * cols }, (_, index) => {
+          const r = Math.floor(index / cols) + 1;
+          const c = (index % cols) + 1;
+          const on = r <= hover[0] && c <= hover[1];
+          const tip = r === hover[0] && c === hover[1];
           return (
             <button
               key={index}
               type="button"
-              aria-label={`${r} × ${c}`}
-              className={r <= hover[0] && c <= hover[1] ? 'is-on' : ''}
+              aria-label={`${r} por ${c}`}
+              className={on ? `is-on${tip ? ' is-tip' : ''}` : ''}
               onMouseEnter={() => setHover([r, c])}
               onFocus={() => setHover([r, c])}
               onClick={() => { onPick(r, c); close?.(); }}
@@ -473,7 +490,6 @@ export function GridPicker({ onPick, close, max = 10 }) {
           );
         })}
       </div>
-      <span>{hover[0] ? `${hover[0]} × ${hover[1]}` : 'Elige filas y columnas'}</span>
     </div>
   );
 }

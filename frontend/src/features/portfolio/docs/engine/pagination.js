@@ -218,6 +218,119 @@ export function reflow(desk, options) {
   }
 }
 
+const SUBSTANCE = 'img, table, svg, iframe, figure, video, canvas, ul, ol, pre, hr:not(.wd-break)';
+
+function visibleText(node) {
+  const raw = node?.startContainer ? node.toString() : (node?.textContent || '');
+  return raw.replace(/\u00a0/g, ' ').trim();
+}
+
+function hasSubstance(el) {
+  return Boolean(el?.matches?.(SUBSTANCE) || el?.querySelector?.(SUBSTANCE));
+}
+
+function isBlankPage(body) {
+  return ![...body.children].some((el) => {
+    if (el.matches('hr.wd-break, br')) return false;
+    if (hasSubstance(el)) return true;
+    return visibleText(el).length > 0;
+  });
+}
+
+function isEmptyBlock(el) {
+  if (!el || el.nodeType !== 1) return false;
+  if (el.matches('hr.wd-break, br')) return true;
+  if (hasSubstance(el)) return false;
+  return !visibleText(el);
+}
+
+function placeCaretIn(body, el, atStart) {
+  if (!body) return;
+  body.focus({ preventScroll: true });
+  const range = document.createRange();
+  range.selectNodeContents(el || body);
+  range.collapse(atStart);
+  const sel = document.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
+
+function removeBlankPages(bodies, index) {
+  const prev = bodies[index - 1];
+  const current = bodies[index];
+  let end = index;
+  const holdsFollowing = [...current.children].some((el) => el.matches('hr.wd-break') && !el.dataset.filler);
+  if (holdsFollowing) {
+    while (end + 1 < bodies.length && isBlankPage(bodies[end + 1])) end += 1;
+  }
+  const followingHasContent = end + 1 < bodies.length && !isBlankPage(bodies[end + 1]);
+  const prevBreak = prev.lastElementChild?.matches?.('hr.wd-break') ? prev.lastElementChild : null;
+  if (followingHasContent) {
+    if (!prevBreak) {
+      const hr = document.createElement('hr');
+      hr.className = 'wd-break';
+      prev.append(hr);
+    }
+  } else if (prevBreak) prevBreak.remove();
+  placeCaretIn(prev, null, false);
+  const removeIds = [];
+  for (let at = index; at <= end; at += 1) {
+    bodies[at].replaceChildren();
+    removeIds.push(bodies[at].dataset.pageId);
+  }
+  return { removeIds };
+}
+
+/**
+ * Retroceso o Supr sobre la primera línea de una página que no es la primera.
+ * Si la página solo tiene esa línea vacía, se quita el salto y la página.
+ * Si hay más contenido, solo se quita la línea vacía.
+ * Con el cursor al inicio de una línea con texto, el salto se elimina y la página se une a la anterior.
+ */
+export function absorbPageBoundary(desk, key) {
+  if (!desk || (key !== 'Backspace' && key !== 'Delete')) return null;
+  const sel = document.getSelection();
+  if (!sel?.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const host = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+  const body = host?.closest?.('[data-page-body]');
+  if (!body || !desk.contains(body)) return null;
+  const bodies = [...desk.querySelectorAll('[data-page-body]')];
+  const index = bodies.indexOf(body);
+  if (index <= 0 || !body.contains(range.endContainer)) return null;
+
+  if (isBlankPage(body) && !visibleText(sel.getRangeAt(0))) {
+    return removeBlankPages(bodies, index);
+  }
+  if (!sel.isCollapsed) return null;
+
+  const first = [...body.children].find((el) => !el.matches('hr.wd-break'));
+  if (!first) return removeBlankPages(bodies, index);
+  if (first !== range.startContainer && !first.contains(range.startContainer)) return null;
+  const before = document.createRange();
+  before.setStart(first, 0);
+  before.setEnd(range.startContainer, range.startOffset);
+  if (visibleText(before)) return null;
+
+  if (isEmptyBlock(first)) {
+    first.remove();
+    if (isBlankPage(body)) return removeBlankPages(bodies, index);
+    const next = [...body.children].find((el) => !el.matches('hr.wd-break')) || body;
+    placeCaretIn(body, next, true);
+    return { removeIds: [] };
+  }
+
+  if (key !== 'Backspace') return null;
+  const prev = bodies[index - 1];
+  const breakEl = prev.lastElementChild?.matches?.('hr.wd-break') ? prev.lastElementChild : null;
+  if (!breakEl) return null;
+  const moved = [...body.childNodes];
+  const anchor = moved.find((node) => node.nodeType === 1 && !node.matches?.('hr.wd-break')) || null;
+  breakEl.replaceWith(...moved);
+  placeCaretIn(prev, anchor, true);
+  return { removeIds: [body.dataset.pageId] };
+}
+
 /** Une los trozos de párrafos/tablas divididos por la paginación (para exportar como flujo continuo). */
 export function joinContinuations(html) {
   const root = document.createElement('div');

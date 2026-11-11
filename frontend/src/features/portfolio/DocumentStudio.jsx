@@ -16,13 +16,13 @@ import {
   caretPosition, clearHold, createHistory, currentBlock, holdSelection, rangeIn, rememberSelection, restoreCaretPosition, restoreSelection, selectedBlocks, selectionHeld,
   applyInlineStyle, applyBlockStyle, setBlockTag, transformCase, insertHtml, insertBlockHtml, exec, anchorElement, wordsOf, setMultiRanges,
 } from './docs/engine/core';
-import { reflow } from './docs/engine/pagination';
+import { absorbPageBoundary, reflow } from './docs/engine/pagination';
 import { trackDelete, trackFormat, trackInsertText } from './docs/engine/tracking';
 import { decorateComments, hydrateFields, hydrateRich, stripDecorations } from './docs/render/rich';
 import { hydrateLiveBlocks, hydrateRefs, loadProject } from './docs/sprintops';
 import { numberNotes, updateCaptions, updateCitations } from './docs/references';
-import { recalcFormulas } from './docs/engine/tables';
-import { createActions } from './docs/actions';
+import { paintDivider, placeDrawnTable, recalcFormulas } from './docs/engine/tables';
+import { createActions, materializeDropCaps } from './docs/actions';
 import { Btn, useFilePicker } from './docs/ui/controls';
 import DocDialog from './docs/ui/DocDialog';
 import { BubbleBar, ContextMenu, InlineMenu, ObjectHandles } from './docs/ui/overlays';
@@ -99,6 +99,7 @@ const PageBody = memo(function PageBody({ pageId, html, editable, spellcheck, la
     if (!node || node.dataset.ready) return;
     const pending = pendingPages[pageId];
     node.innerHTML = sanitizeHtml(pending ?? html);
+    materializeDropCaps(node);
     delete pendingPages[pageId];
     node.dataset.ready = '1';
   }, [html, pageId]);
@@ -123,16 +124,34 @@ const ChromeField = memo(function ChromeField({ field, value, placeholder, edita
   const ref = useRef(null);
   const kind = field.startsWith('header') ? 'header' : 'footer';
   const filled = Boolean((value || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim());
+  const [ruleOn, setRuleOn] = useState(false);
+  const [ruleOpen, setRuleOpen] = useState(false);
+  useEffect(() => {
+    if (kind !== 'footer') return undefined;
+    if (editing) {
+      setRuleOn(true);
+      const frame = requestAnimationFrame(() => setRuleOpen(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    setRuleOpen(false);
+    const timer = setTimeout(() => setRuleOn(false), 220);
+    return () => clearTimeout(timer);
+  }, [editing, kind]);
   useLayoutEffect(() => {
     if (ref.current && document.activeElement !== ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = sanitizeHtml(value || '').replace(/^<p><br><\/p>$/, '');
   }, [value]);
-  const rule = editing ? (
-    <div className="wd-chrome-rule" aria-hidden="true">
-      <span className="wd-chrome-tag">{placeholder}</span>
+  const showRule = kind === 'footer' ? ruleOn : editing;
+  const rule = showRule ? (
+    <div className={`wd-chrome-rule${kind === 'footer' && !ruleOpen ? ' is-closing' : ''}`} aria-hidden="true">
+      {kind === 'footer' ? (
+        <div className="wd-chrome-rule-row">
+          <span className="wd-chrome-tag">{placeholder}</span>
+        </div>
+      ) : <span className="wd-chrome-tag">{placeholder}</span>}
     </div>
   ) : null;
   return (
-    <div className={`wd-chrome wd-chrome-${kind}${editing ? ' is-editing' : ''}${filled ? ' has-text' : ''}`}>
+    <div className={`wd-chrome wd-chrome-${kind}${editing ? ' is-editing' : ''}${filled ? ' has-text' : ''}${kind === 'footer' && ruleOn && !editing ? ' is-closing' : ''}`}>
       {kind === 'footer' && rule}
       <div
         ref={ref}
@@ -300,6 +319,17 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
   const [epoch, setEpoch] = useState(0);
   const [tab, setTab] = useState('home');
   const [ribbonOpen, setRibbonOpen] = useState(true);
+  const [equationRequest, setEquationRequest] = useState(null);
+  useEffect(() => {
+    const open = (event) => {
+      const el = event.detail;
+      setTab('insert');
+      setRibbonOpen(true);
+      setEquationRequest({ tex: el?.dataset?.tex || 'E = mc^2', inline: el?.tagName === 'SPAN', el: el || null, key: Date.now() });
+    };
+    window.addEventListener('wd-equation', open);
+    return () => window.removeEventListener('wd-equation', open);
+  }, []);
   const [view, setViewState] = useState({ mode: 'print', zoom: 1, fit: null, layout: 'single', rulers: false, vruler: false, grid: false, marks: false, bounds: false, split: false, syncScroll: true, compare: null, markup: 'all', spellcheck: true });
   const [left, setLeft] = useState({ open: false, tab: 'nav' });
   const [right, setRight] = useState({ open: false, tab: 'comments' });
@@ -479,7 +509,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     const bodies = [...(root?.querySelectorAll('[data-page-body]') || [])];
     const sameShape = bodies.length === next.pages.length && bodies.every((body, index) => body.dataset.pageId === next.pages[index].id);
     if (sameShape) {
-      bodies.forEach((body, index) => { body.innerHTML = sanitizeHtml(next.pages[index].html); });
+      bodies.forEach((body, index) => { body.innerHTML = sanitizeHtml(next.pages[index].html); materializeDropCaps(body); });
       requestAnimationFrame(() => {
         runReflow();
         if (caret) restoreCaretPosition(root, caret);
@@ -500,7 +530,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     const bodies = [...root.querySelectorAll('[data-page-body]')];
     const sameShape = bodies.length === entry.pages.length && bodies.every((body, index) => body.dataset.pageId === entry.pages[index].id);
     if (sameShape) {
-      bodies.forEach((body, index) => { if (body.innerHTML !== entry.pages[index].html) body.innerHTML = entry.pages[index].html; });
+      bodies.forEach((body, index) => { if (body.innerHTML !== entry.pages[index].html) body.innerHTML = entry.pages[index].html; materializeDropCaps(body); });
       restoreCaretPosition(root, entry.caret);
     } else {
       pendingCaret.current = entry.caret;
@@ -822,6 +852,104 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     if (caret && document.activeElement?.closest?.('[data-page-body]')) restoreCaretPosition(root, caret);
   }, [commentsKey, activeComment]);
 
+  const tableDraw = pen.tool === 'table';
+  useEffect(() => {
+    if (!tableDraw) return undefined;
+    const root = deskRef.current;
+    if (!root) return undefined;
+    const zoomOf = () => {
+      const page = root.querySelector('.wd-page');
+      if (!page?.offsetWidth) return 1;
+      return page.getBoundingClientRect().width / page.offsetWidth || 1;
+    };
+    const ghost = document.createElement('div');
+    ghost.className = 'wd-table-ghost';
+    ghost.hidden = true;
+    document.body.append(ghost);
+    let drag = null;
+
+    const linePreview = (table, x0, y0, x1, y1) => {
+      const horizontal = Math.abs(x1 - x0) >= Math.abs(y1 - y0);
+      const cells = [...table.querySelectorAll('td, th')].filter((cell) => {
+        const box = cell.getBoundingClientRect();
+        if (horizontal) {
+          const y = (y0 + y1) / 2;
+          return y > box.top + 7 && y < box.bottom - 7 && Math.min(x0, x1) < box.right - 8 && Math.max(x0, x1) > box.left + 8;
+        }
+        const x = (x0 + x1) / 2;
+        return x > box.left + 7 && x < box.right - 7 && Math.min(y0, y1) < box.bottom - 8 && Math.max(y0, y1) > box.top + 8;
+      });
+      if (!cells.length) return null;
+      const boxes = cells.map((cell) => cell.getBoundingClientRect());
+      const left = Math.min(...boxes.map((box) => box.left));
+      const right = Math.max(...boxes.map((box) => box.right));
+      const top = Math.min(...boxes.map((box) => box.top));
+      const bottom = Math.max(...boxes.map((box) => box.bottom));
+      if (horizontal) {
+        const y = (y0 + y1) / 2;
+        return { left, top: y - 1.5, width: right - left, height: 3, line: true };
+      }
+      const x = (x0 + x1) / 2;
+      return { left: x - 1.5, top, width: 3, height: bottom - top, line: true };
+    };
+
+    const onDown = (event) => {
+      if (event.button !== 0) return;
+      const body = event.target.closest?.('.wd-body');
+      if (!body || !root.contains(body)) return;
+      event.preventDefault();
+      drag = { x: event.clientX, y: event.clientY, target: event.target };
+      ghost.hidden = false;
+    };
+    const onMove = (event) => {
+      if (!drag) return;
+      const table = drag.target.closest?.('table') || document.elementFromPoint(drag.x, drag.y)?.closest?.('table');
+      const inside = table && root.contains(table) ? linePreview(table, drag.x, drag.y, event.clientX, event.clientY) : null;
+      const box = inside || {
+        left: Math.min(drag.x, event.clientX),
+        top: Math.min(drag.y, event.clientY),
+        width: Math.abs(event.clientX - drag.x),
+        height: Math.abs(event.clientY - drag.y),
+        line: false,
+      };
+      ghost.classList.toggle('is-line', box.line);
+      ghost.style.left = `${box.left}px`;
+      ghost.style.top = `${box.top}px`;
+      ghost.style.width = `${box.width}px`;
+      ghost.style.height = `${box.height}px`;
+    };
+    const onUp = (event) => {
+      if (!drag) return;
+      const start = drag;
+      drag = null;
+      ghost.hidden = true;
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < 14) return;
+      const table = start.target.closest?.('table');
+      if (table && root.contains(table)) {
+        if (paintDivider(table, { x0: start.x, y0: start.y, x1: event.clientX, y1: event.clientY })) change();
+        return;
+      }
+      const anchor = start.target.closest?.('.wd-body') || root.querySelector('.wd-body');
+      if (!anchor) return;
+      placeDrawnTable(anchor, Math.abs(event.clientX - start.x) / zoomOf(), Math.abs(event.clientY - start.y) / zoomOf());
+      change();
+    };
+    const onKey = (event) => {
+      if (event.key === 'Escape') setPen({ tool: null });
+    };
+    root.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      root.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('keydown', onKey);
+      ghost.remove();
+    };
+  }, [tableDraw, change, setPen]);
+
   // ---------- Zoom ----------
 
   const effectiveZoom = useMemo(() => {
@@ -911,6 +1039,8 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     closeLeft: () => setLeft((current) => ({ ...current, open: false })),
     openRight: (tabName) => setRight({ open: true, tab: tabName }),
     closeRight: () => setRight((current) => ({ ...current, open: false })),
+    equationRequest,
+    consumeEquation: () => setEquationRequest(null),
   };
 
   // ---------- Eventos del documento ----------
@@ -988,6 +1118,15 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       setObjVersion((value) => value + 1);
       change({ noReflow: true });
       return;
+    }
+    if ((event.key === 'Backspace' || event.key === 'Delete') && !mod && !event.altKey && !event.target.closest?.('.wd-chrome')) {
+      const released = absorbPageBoundary(deskRef.current, event.key);
+      if (released) {
+        event.preventDefault();
+        released.removeIds.forEach((id) => removePage(id));
+        change();
+        return;
+      }
     }
     if (event.key === 'Tab' && !mod) {
       if (actions.handleTab(event.shiftKey)) event.preventDefault();
@@ -1258,7 +1397,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
         {left.open && <LeftPanel tab={left.tab} setTab={(tabName) => setLeft({ open: true, tab: tabName })} onClose={() => setLeft((current) => ({ ...current, open: false }))} headings={headings} pages={pages} desk={deskRef} epoch={epoch} find={find} setFind={setFind} actions={actions} project={project} meta={meta} doc={doc} metrics={metrics} />}
         <div
           ref={deskRef}
-          className={`wd-desk layout-${view.layout}${pen.tool ? ' is-drawing' : ''}`}
+          className={`wd-desk layout-${view.layout}${pen.tool ? ' is-drawing' : ''}${pen.tool === 'table' ? ' is-table-draw' : ''}`}
           onInput={onInput}
           onBeforeInput={onBeforeInput}
           onKeyDown={onKeyDown}

@@ -384,32 +384,273 @@ async function toEpub(html, title, author) {
   return zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
 }
 
-/** Exporta a PDF capturando las páginas tal como se ven (encabezados, pies, fondos y marcas de agua incluidos). */
+function prepareExportPage(page, metrics) {
+  const clone = page.cloneNode(true);
+  clone.classList.add('wd-export-page');
+  clone.querySelectorAll('[contenteditable]').forEach((el) => el.removeAttribute('contenteditable'));
+  clone.querySelectorAll('[spellcheck]').forEach((el) => el.setAttribute('spellcheck', 'false'));
+  clone.querySelectorAll('.wd-ink-layer, .wd-collab-tag, .wd-obj-handles').forEach((el) => el.remove());
+  clone.querySelectorAll('mark.wd-cmark').forEach((mark) => mark.replaceWith(...mark.childNodes));
+  clone.querySelectorAll('span.wd-fmtchg').forEach((el) => {
+    const look = el.getAttribute('style');
+    const kids = [...el.childNodes];
+    if (look && kids.length) {
+      const keep = document.createElement('span');
+      keep.setAttribute('style', look);
+      keep.append(...kids);
+      el.replaceWith(keep);
+    } else el.replaceWith(...kids);
+  });
+  const quiet = document.createElement('style');
+  quiet.textContent = '.wd-export-page ::spelling-error, .wd-export-page ::grammar-error { text-decoration: none !important; background: none !important; }';
+  clone.prepend(quiet);
+  Object.assign(clone.style, {
+    width: `${metrics.width}px`,
+    height: `${metrics.height}px`,
+    minHeight: `${metrics.height}px`,
+    margin: '0',
+    boxShadow: 'none',
+    position: 'relative',
+    overflow: 'hidden',
+    background: clone.style.background || '#ffffff',
+  });
+  return clone;
+}
+
+function pdfColor(value) {
+  if (!value || value === 'transparent') return null;
+  const rgb = String(value).match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)/i);
+  if (rgb) {
+    const alpha = rgb[4] == null ? 1 : (rgb[4].endsWith('%') ? parseFloat(rgb[4]) / 100 : parseFloat(rgb[4]));
+    if (alpha < 0.04) return null;
+    return [Math.round(Number(rgb[1])), Math.round(Number(rgb[2])), Math.round(Number(rgb[3]))];
+  }
+  const srgb = String(value).match(/color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/i);
+  if (srgb) {
+    const alpha = srgb[4] == null ? 1 : parseFloat(srgb[4]);
+    if (alpha < 0.04) return null;
+    return [Math.round(Number(srgb[1]) * 255), Math.round(Number(srgb[2]) * 255), Math.round(Number(srgb[3]) * 255)];
+  }
+  const hex = String(value).match(/^#([\da-f]{3}|[\da-f]{6})$/i);
+  if (!hex) return null;
+  const full = hex[1].length === 3 ? hex[1].split('').map((ch) => ch + ch).join('') : hex[1];
+  return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
+}
+
+function pdfFace(style) {
+  const family = (style.fontFamily || '').toLowerCase();
+  const face = /mono|courier|consolas|menlo|monaco|source code|ui-monospace/.test(family)
+    ? 'courier'
+    : /georgia|times|cambria|palatino|garamond|liberation serif|serif/.test(family)
+      ? 'times'
+      : 'helvetica';
+  const bold = style.fontWeight === 'bold' || Number(style.fontWeight) >= 600;
+  const italic = /italic|oblique/.test(style.fontStyle || '');
+  let fontStyle = 'normal';
+  if (bold && italic) fontStyle = face === 'courier' ? 'boldoblique' : 'bolditalic';
+  else if (bold) fontStyle = 'bold';
+  else if (italic) fontStyle = face === 'courier' ? 'oblique' : 'italic';
+  return { face, fontStyle };
+}
+
+function quotedContent(value) {
+  if (!value || value === 'none' || value === 'normal') return '';
+  const quoted = String(value).match(/^"([\s\S]*)"$/);
+  return quoted ? quoted[1] : '';
+}
+
+function hiddenBox(style) {
+  return style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0;
+}
+
+function paintBorders(pdf, rect, style, origin) {
+  const sides = [
+    ['Top', rect.left, rect.top, rect.right, rect.top],
+    ['Right', rect.right, rect.top, rect.right, rect.bottom],
+    ['Bottom', rect.left, rect.bottom, rect.right, rect.bottom],
+    ['Left', rect.left, rect.top, rect.left, rect.bottom],
+  ];
+  sides.forEach(([side, x1, y1, x2, y2]) => {
+    const width = parseFloat(style[`border${side}Width`]) || 0;
+    if (width < 0.4 || style[`border${side}Style`] === 'none') return;
+    const color = pdfColor(style[`border${side}Color`]);
+    if (!color) return;
+    pdf.setDrawColor(color[0], color[1], color[2]);
+    pdf.setLineWidth(width);
+    pdf.line(x1 - origin.left, y1 - origin.top, x2 - origin.left, y2 - origin.top);
+  });
+}
+
+function textLines(node) {
+  const text = node.textContent.replace(/\u00a0/g, ' ');
+  const lines = [];
+  const range = document.createRange();
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] === '\n') { index += 1; continue; }
+    range.setStart(node, index);
+    range.setEnd(node, index + 1);
+    const first = range.getClientRects()[0];
+    if (!first || (first.width === 0 && first.height === 0)) { index += 1; continue; }
+    let end = index + 1;
+    while (end < text.length && text[end] !== '\n') {
+      range.setStart(node, end);
+      range.setEnd(node, end + 1);
+      const next = range.getClientRects()[0];
+      if (!next || Math.abs(next.top - first.top) > 1.5) break;
+      end += 1;
+    }
+    if (end === index) end = index + 1;
+    range.setStart(node, index);
+    range.setEnd(node, end);
+    const rect = range.getBoundingClientRect();
+    const slice = text.slice(index, end);
+    if (slice.trim() && rect.width > 0.2 && rect.height > 0.2) lines.push({ text: slice, rect });
+    index = end;
+  }
+  return lines;
+}
+
+let glyphMeasure;
+
+function paintTextRun(pdf, text, rect, style, origin) {
+  const color = pdfColor(style.color) || [30, 41, 59];
+  const { face, fontStyle } = pdfFace(style);
+  const fontPx = parseFloat(style.fontSize) || 16;
+  pdf.setFont(face, fontStyle);
+  pdf.setFontSize((fontPx * 72) / 96);
+  pdf.setTextColor(color[0], color[1], color[2]);
+  if (!glyphMeasure) glyphMeasure = document.createElement('canvas').getContext('2d');
+  glyphMeasure.font = `${style.fontStyle || 'normal'} ${style.fontWeight || '400'} ${style.fontSize} ${style.fontFamily}`;
+  const measured = glyphMeasure.measureText(text);
+  const descent = measured.actualBoundingBoxDescent || 0;
+  const natural = pdf.getTextWidth(text);
+  const scale = natural > 0 ? Math.min(2, Math.max(0.5, rect.width / natural)) : 1;
+  const x = rect.left - origin.left;
+  const y = rect.bottom - origin.top - descent;
+  pdf.text(text, x, y, { baseline: 'alphabetic', horizontalScale: scale });
+  const deco = style.textDecorationLine || '';
+  if (deco.includes('underline') || deco.includes('line-through')) {
+    pdf.setDrawColor(color[0], color[1], color[2]);
+    pdf.setLineWidth(Math.max(0.6, fontPx / 16));
+    if (deco.includes('underline')) pdf.line(x, y + Math.max(1, fontPx * 0.08), x + rect.width, y + Math.max(1, fontPx * 0.08));
+    if (deco.includes('line-through')) pdf.line(x, y - fontPx * 0.28, x + rect.width, y - fontPx * 0.28);
+  }
+}
+
+function paintBoxes(pdf, root) {
+  const origin = root.getBoundingClientRect();
+  pdf.setFillColor(255, 255, 255);
+  pdf.rect(0, 0, origin.width, origin.height, 'F');
+  [root, ...root.querySelectorAll('*')].forEach((el) => {
+    const style = getComputedStyle(el);
+    if (hiddenBox(style)) return;
+    const bg = pdfColor(style.backgroundColor);
+    if (bg) {
+      pdf.setFillColor(bg[0], bg[1], bg[2]);
+      [...el.getClientRects()].forEach((rect) => {
+        if (rect.width < 0.4 || rect.height < 0.4) return;
+        pdf.rect(rect.left - origin.left, rect.top - origin.top, rect.width, rect.height, 'F');
+      });
+    }
+    const box = el.getBoundingClientRect();
+    if (box.width > 0.4 && box.height > 0.4) paintBorders(pdf, box, style, origin);
+  });
+}
+
+function paintVectorPage(pdf, root) {
+  const origin = root.getBoundingClientRect();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const parent = node.parentElement;
+    const style = parent ? getComputedStyle(parent) : null;
+    if (style && !hiddenBox(style)) {
+      textLines(node).forEach((line) => paintTextRun(pdf, line.text, line.rect, style, origin));
+    }
+    node = walker.nextNode();
+  }
+  root.querySelectorAll('li, .wd-checklist li').forEach((el) => {
+    const style = getComputedStyle(el);
+    if (hiddenBox(style) || style.listStyleType === 'none' || style.listStylePosition === 'inside') return;
+    const rect = el.getBoundingClientRect();
+    const marker = style.listStyleType === 'decimal'
+      ? `${[...el.parentElement.children].filter((item) => item.tagName === 'LI').indexOf(el) + 1}.`
+      : '•';
+    paintTextRun(pdf, marker, { left: rect.left - 16, top: rect.top, width: 14, height: rect.height, right: rect.left - 2, bottom: rect.bottom }, style, origin);
+  });
+  root.querySelectorAll('*').forEach((el) => {
+    const before = getComputedStyle(el, '::before');
+    const text = quotedContent(before.content);
+    if (!text || hiddenBox(before)) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 0.4) return;
+    paintTextRun(pdf, text, { left: rect.left, top: rect.top, width: Math.max(12, text.length * (parseFloat(before.fontSize) || 12) * 0.6), height: rect.height }, before, origin);
+  });
+  root.querySelectorAll('a[href]').forEach((link) => {
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('javascript:')) return;
+    [...link.getClientRects()].forEach((rect) => {
+      if (rect.width < 1 || rect.height < 1) return;
+      pdf.link(rect.left - origin.left, rect.top - origin.top, rect.width, rect.height, { url: href });
+    });
+  });
+}
+
+async function paintGraphics(pdf, root) {
+  const origin = root.getBoundingClientRect();
+  const nodes = [...root.querySelectorAll('img, svg, canvas')].filter((el) => !el.closest('.wd-ink-layer'));
+  for (const el of nodes) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) continue;
+    try {
+      let url = '';
+      if (el.tagName === 'CANVAS') url = el.toDataURL('image/png');
+      else if (el.tagName === 'IMG') url = el.currentSrc || el.src;
+      else url = await svgToPng(new XMLSerializer().serializeToString(el), rect.width, rect.height);
+      if (!url) continue;
+      const format = /jpe?g/i.test(url.slice(0, 40)) ? 'JPEG' : 'PNG';
+      pdf.addImage(url, format, rect.left - origin.left, rect.top - origin.top, rect.width, rect.height, undefined, 'FAST');
+    } catch {
+      /* una imagen suelta no debe tumbar el texto del PDF */
+    }
+  }
+}
+
+/** PDF con texto real (no una foto de la página): letra nítida a cualquier zoom y el color tal como está en el documento. */
 async function toPdf(pageNodes, doc) {
-  const { default: html2pdf } = await import('html2pdf.js');
+  const { jsPDF } = await import('jspdf');
   const metrics = pageMetrics(doc);
+  const orientation = metrics.width > metrics.height ? 'landscape' : 'portrait';
   const container = document.createElement('div');
   container.className = 'wd-export-root';
-  Object.assign(container.style, { position: 'fixed', left: '-10000px', top: '0', width: `${metrics.width}px` });
-  pageNodes.forEach((page) => {
-    const clone = page.cloneNode(true);
-    clone.querySelectorAll('[contenteditable]').forEach((el) => el.removeAttribute('contenteditable'));
-    clone.querySelectorAll('.wd-ink-layer canvas, .wd-collab-tag, .wd-obj-handles').forEach((el) => el.remove());
-    clone.querySelectorAll('mark.wd-cmark').forEach((mark) => mark.replaceWith(...mark.childNodes));
-    clone.style.boxShadow = 'none';
-    clone.style.margin = '0';
-    clone.style.pageBreakAfter = 'always';
-    container.append(clone);
+  Object.assign(container.style, {
+    position: 'fixed',
+    left: '0',
+    top: '0',
+    width: `${metrics.width}px`,
+    zIndex: '-1',
+    pointerEvents: 'none',
   });
   document.body.append(container);
   try {
-    return await html2pdf().set({
-      margin: 0,
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: null },
-      jsPDF: { unit: 'px', format: [metrics.width, metrics.height], orientation: metrics.width > metrics.height ? 'landscape' : 'portrait', hotfixes: ['px_scaling'] },
-      pagebreak: { mode: ['css'] },
-    }).from(container).outputPdf('blob');
+    const pdf = new jsPDF({
+      unit: 'px',
+      format: [metrics.width, metrics.height],
+      orientation,
+      hotfixes: ['px_scaling'],
+      compress: true,
+    });
+    for (let index = 0; index < pageNodes.length; index += 1) {
+      if (index > 0) pdf.addPage([metrics.width, metrics.height], orientation);
+      const clone = prepareExportPage(pageNodes[index], metrics);
+      container.append(clone);
+      paintBoxes(pdf, clone);
+      await paintGraphics(pdf, clone);
+      paintVectorPage(pdf, clone);
+      clone.remove();
+    }
+    return pdf.output('blob');
   } finally {
     container.remove();
   }

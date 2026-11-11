@@ -1,4 +1,4 @@
-// Objetos del documento (imagen, forma, gráfico, diagrama, cuadro de texto, WordArt, icono):
+// Objetos del documento (imagen, forma, gráfico, diagrama, cuadro de texto, texto decorado, icono):
 // render, ajuste de texto, transformaciones, orden, alineación, agrupación y efectos de imagen.
 
 import { escapeHtml } from '../sanitize';
@@ -45,7 +45,7 @@ export function innerFor(kind, spec, id) {
   if (kind === 'chart') return renderChartSvg(spec);
   if (kind === 'diagram') return renderDiagramSvg(spec);
   if (kind === 'icon') return `<div class="wd-icon-svg" style="color:${escapeHtml(spec.color || '#2f6f5e')}">${spec.svg || ''}</div>`;
-  if (kind === 'wordart') return `<div class="wd-wordart" style="${WORDART_STYLES[spec.style]?.css || WORDART_STYLES.gradient.css};font-size:${Number(spec.size) || 48}px;font-family:${escapeHtml(spec.font || 'inherit')}">${escapeHtml(spec.text || 'WordArt')}</div>`;
+  if (kind === 'wordart') return `<div class="wd-wordart" style="${WORDART_STYLES[spec.style]?.css || WORDART_STYLES.gradient.css};font-size:${Number(spec.size) || 48}px;font-family:${escapeHtml(spec.font || 'inherit')}">${escapeHtml(spec.text || 'Texto')}</div>`;
   if (kind === 'textbox') return `<div class="wd-textbox-body" contenteditable="true">${spec.html || '<p>Escribe aquí</p>'}</div>`;
   if (kind === 'signature') return `<div class="wd-signature"><div class="wd-signature-x">✕</div><div class="wd-signature-line"></div><strong>${escapeHtml(spec.name || 'Nombre')}</strong><span>${escapeHtml(spec.title || 'Cargo')}</span>${spec.email ? `<span>${escapeHtml(spec.email)}</span>` : ''}</div>`;
   if (kind === 'image') return `<img src="${escapeHtml(spec.src)}" alt="${escapeHtml(spec.alt || '')}" loading="lazy" decoding="async">`;
