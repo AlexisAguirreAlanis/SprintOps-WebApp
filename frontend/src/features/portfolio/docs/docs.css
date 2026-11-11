@@ -260,19 +260,6 @@
 .wd-pop.is-bare { padding: 0; min-height: 0; }
 .wd-pop.is-table-menu {
   width: min(352px, calc(100vw - 24px)) !important;
-  border-radius: 16px;
-  border-color: color-mix(in srgb, var(--app-accent) 28%, var(--app-border));
-  box-shadow: 0 22px 50px rgb(15 23 42 / 16%), 0 0 0 1px color-mix(in srgb, var(--app-accent) 16%, transparent);
-  transform-origin: top left;
-  animation: wd-table-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.wd-pop.is-table-menu.is-out { animation: wd-table-out 140ms ease forwards; }
-@keyframes wd-table-in {
-  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes wd-table-out {
-  to { opacity: 0; transform: translateY(-6px) scale(0.98); }
 }
 .wd-table-sheet { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
 .wd-table-actions {
@@ -283,7 +270,7 @@
   overflow: auto;
   scrollbar-width: none;
   padding: 6px 8px 8px;
-  border-top: 1px solid color-mix(in srgb, var(--app-accent) 16%, var(--app-border));
+  border-top: 1px solid var(--app-border);
   background: var(--app-surface);
 }
 .wd-pop.is-color-studio { width: min(348px, calc(100vw - 24px)) !important; transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1), left 220ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -396,11 +383,11 @@
 
 .wd-gridpick {
   padding: 14px 14px 12px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--app-accent) 16%, var(--app-surface)) 0, var(--app-surface) 78px);
+  background: var(--app-surface);
 }
 .wd-gridpick-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .wd-gridpick-head strong { font-size: 14px; font-weight: 800; letter-spacing: -0.02em; }
-.wd-gridpick-head span { font-size: 12px; font-weight: 800; color: var(--app-accent); font-variant-numeric: tabular-nums; }
+.wd-gridpick-head span { font-size: 12px; font-weight: 700; color: var(--app-muted); font-variant-numeric: tabular-nums; }
 .wd-gridpick-cells { display: grid; width: 100%; gap: 4px; }
 .wd-gridpick-cells button {
   width: 100%;
