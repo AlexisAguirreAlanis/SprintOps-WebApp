@@ -443,22 +443,46 @@
 .wd-ribbon:has(.wd-gallery) .wd-group { padding: 0 4px; }
 .wd-ribbon:has(.wd-tools) > .wd-group {
   flex: 1 1 0 !important;
-  min-width: 0;
+  min-width: min-content;
   padding: 0 2px;
-  container-type: inline-size;
+  overflow: hidden;
 }
 .wd-ribbon:has(.wd-tools) > .wd-group:has(.wd-gallery:nth-child(2)) { flex-grow: 2 !important; }
 .wd-ribbon:has(.wd-tools) > .wd-group:has(.wd-gallery:nth-child(3)) { flex-grow: 3 !important; }
 .wd-ribbon:has(.wd-tools) > .wd-group:has(.wd-gallery:nth-child(4)) { flex-grow: 4 !important; }
 .wd-ribbon:has(.wd-tools) > .wd-group:has(.wd-gallery:nth-child(5)) { flex-grow: 5 !important; }
 .wd-ribbon:has(.wd-tools) > .wd-group:has(.wd-gallery:nth-child(6)) { flex-grow: 6 !important; }
+.wd-ribbon:has(.wd-tools) .wd-group-body { min-width: min-content; overflow: hidden; }
 .wd-ribbon:has(.wd-tools) .wd-group-label {
   overflow: hidden;
   text-overflow: clip;
-  font-size: clamp(8px, 16cqw, 10px);
+  font-size: 10px;
 }
-.wd-ribbon .wd-tools { display: flex; align-items: stretch; gap: 1px; width: 100%; min-width: 0; height: 54px; }
-.wd-ribbon .wd-tools .wd-gallery { width: 0; flex: 1 1 0 !important; min-width: 0; container-type: inline-size; }
+.wd-ribbon .wd-tools { display: flex; align-items: stretch; gap: 1px; width: 100%; min-width: min-content; height: 54px; }
+.wd-ribbon .wd-tools .wd-gallery { width: auto; flex: 1 1 0 !important; min-width: var(--wd-min, min-content); overflow: hidden; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(1) .wd-gallery:nth-child(1) { --wd-min: 45px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(1) .wd-gallery:nth-child(2) { --wd-min: 54px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(1) .wd-gallery:nth-child(3) { --wd-min: 46px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(2) .wd-gallery:nth-child(1) { --wd-min: 32px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(3) .wd-gallery:nth-child(1) { --wd-min: 54px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(3) .wd-gallery:nth-child(2) { --wd-min: 43px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(3) .wd-gallery:nth-child(3) { --wd-min: 39px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(4) .wd-gallery:nth-child(1) { --wd-min: 43px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(4) .wd-gallery:nth-child(2) { --wd-min: 53px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(4) .wd-gallery:nth-child(3) { --wd-min: 58px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(5) .wd-gallery:nth-child(1) { --wd-min: 68px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(5) .wd-gallery:nth-child(2) { --wd-min: 38px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(5) .wd-gallery:nth-child(3) { --wd-min: 55px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(6) .wd-gallery:nth-child(1) { --wd-min: 47px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(6) .wd-gallery:nth-child(2) { --wd-min: 57px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(6) .wd-gallery:nth-child(3) { --wd-min: 38px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(6) .wd-gallery:nth-child(4) { --wd-min: 47px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(6) .wd-gallery:nth-child(5) { --wd-min: 36px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(6) .wd-gallery:nth-child(6) { --wd-min: 39px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(7) .wd-gallery:nth-child(1) { --wd-min: 51px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(7) .wd-gallery:nth-child(2) { --wd-min: 46px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(8) .wd-gallery:nth-child(1) { --wd-min: 34px; }
+.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(9) .wd-gallery:nth-child(1) { --wd-min: 56px; }
 .wd-ribbon .wd-tools .wd-gallery > .wd-menu-btn.is-wide,
 .wd-ribbon .wd-tools .wd-gallery > .wd-btn.is-wide {
   display: flex;
@@ -470,7 +494,7 @@
   min-width: 0;
   max-width: none;
   height: 54px;
-  padding: 2px 1px 1px;
+  padding: 1px 0 0;
   overflow: hidden;
   font-size: 10px;
   font-weight: 700;
@@ -496,6 +520,7 @@
 }
 .wd-ribbon .wd-tools .wd-gallery > .wd-btn.is-wide > span,
 .wd-ribbon .wd-tools .wd-gallery > .wd-menu-btn.is-wide > span:not(.wd-ico) {
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
   width: 100%;
@@ -505,8 +530,8 @@
   overflow-wrap: normal;
   word-break: normal;
   text-overflow: clip;
-  line-height: 1.15;
-  font-size: clamp(6px, 12cqw, 10px);
+  line-height: 1.2;
+  font-size: 10px;
   font-weight: 700;
   text-align: center;
   display: block;
@@ -519,7 +544,7 @@
   grid-row: auto;
   width: 10px;
   height: 10px;
-  margin-top: 1px;
+  margin-top: 0;
   flex: 0 0 auto;
 }
 .wd-ribbon .wd-split { display: flex; align-items: center; gap: 2px; height: 54px; }
