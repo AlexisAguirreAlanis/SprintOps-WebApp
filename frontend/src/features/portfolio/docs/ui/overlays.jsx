@@ -4,7 +4,7 @@ import { Bold, Highlighter, Italic, Palette, Strikethrough, Underline } from 'lu
 import { applyTransform } from '../engine/objects';
 import { holdSelection } from '../engine/core';
 import { SIZES } from '../ribbon/HomeTab';
-import { Btn, ColorGrid, FontField, Menu, ScrollPane, Select } from './controls';
+import { Btn, ColorGrid, FontField, Menu, ScrollPane, SizeField } from './controls';
 
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
@@ -126,7 +126,7 @@ export function BubbleBar({ rect, sel, api }) {
   return createPortal(
     <div ref={barRef} className="wd-bubble" style={{ top, left }} role="toolbar" aria-label="Formato rápido" onMouseDown={(event) => { if (event.target.closest('input, textarea')) { holdSelection(document.querySelector('.wd-desk')); return; } event.preventDefault(); }}>
       <FontField value={sel.font || ''} onChange={(value) => value && api.inline({ fontFamily: value })} />
-      <Select className="is-size" label="Tamaño" width={58} value={String(sel.size || '')} options={[['', sel.size ? String(sel.size) : '—'], ...SIZES.map((size) => [String(size), String(size)])]} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
+      <SizeField value={String(sel.size || '')} sizes={SIZES} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
       <Btn icon={Bold} label="Negrita" active={sel.bold} onClick={() => api.cmd('bold')} />
       <Btn icon={Italic} label="Cursiva" active={sel.italic} onClick={() => api.cmd('italic')} />
       <Btn icon={Underline} label="Subrayado" active={sel.underline} onClick={() => api.cmd('underline')} />

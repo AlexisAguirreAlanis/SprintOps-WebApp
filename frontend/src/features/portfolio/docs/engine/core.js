@@ -26,11 +26,16 @@ export function selectionHeld() {
 /** Conserva la selección mientras el foco pasa a la cinta o a un campo de la barra. */
 export function holdSelection(desk) {
   const range = rangeIn(desk);
-  if (range && !range.collapsed) saved = range.cloneRange();
-  if (saved && !saved.collapsed) {
-    holding = true;
-    paintHold();
+  if (range) {
+    saved = range.cloneRange();
+    if (!range.collapsed) {
+      holding = true;
+      paintHold();
+      return;
+    }
   }
+  holding = false;
+  try { CSS.highlights?.delete('wd-hold'); } catch { /* ignore */ }
 }
 
 export function selection() {
@@ -121,8 +126,66 @@ export function selectedBlocks(desk) {
   return blocks.filter((block) => !blocks.some((other) => other !== block && block.contains(other) && other.matches('li, td, th, p, h1, h2, h3, h4, h5, h6')));
 }
 
+function focusDesk(desk) {
+  const sel = selection();
+  const host = hostOf(sel?.anchorNode) || desk?.querySelector(BODY_SELECTOR);
+  host?.focus({ preventScroll: true });
+}
+
+function toggleScript(desk, mode) {
+  const range = rangeIn(desk);
+  if (!range) return false;
+  const tag = mode === 'subscript' ? 'SUB' : 'SUP';
+  const el = anchorElement();
+  const wrap = el?.closest?.('sub, sup');
+  if (wrap && desk.contains(wrap)) {
+    const same = wrap.tagName === tag;
+    const inside = range.intersectsNode(wrap);
+    if (same && (inside || range.collapsed)) {
+      const parent = wrap.parentNode;
+      while (wrap.firstChild) parent.insertBefore(wrap.firstChild, wrap);
+      wrap.remove();
+      rememberSelection(desk);
+      return true;
+    }
+  }
+  if (!range.collapsed) {
+    const node = document.createElement(tag.toLowerCase());
+    try {
+      range.surroundContents(node);
+    } catch {
+      node.appendChild(range.extractContents());
+      range.insertNode(node);
+    }
+    const caret = document.createRange();
+    caret.selectNodeContents(node);
+    caret.collapse(false);
+    selection().removeAllRanges();
+    selection().addRange(caret);
+    rememberSelection(desk);
+    return true;
+  }
+  document.execCommand('styleWithCSS', false, false);
+  if (document.execCommand(mode, false, null)) {
+    rememberSelection(desk);
+    return true;
+  }
+  applyInlineStyle(desk, {
+    verticalAlign: mode === 'subscript' ? 'sub' : 'super',
+    fontSize: '0.75em',
+    lineHeight: '1',
+  });
+  return true;
+}
+
 export function exec(desk, name, value = null) {
   restoreSelection(desk);
+  focusDesk(desk);
+  if (name === 'subscript' || name === 'superscript') {
+    const ok = toggleScript(desk, name);
+    rememberSelection(desk);
+    return ok;
+  }
   document.execCommand('styleWithCSS', false, true);
   const ok = document.execCommand(name, false, value);
   rememberSelection(desk);
@@ -153,7 +216,12 @@ export function applyInlineStyle(desk, styles) {
   }
   document.execCommand('styleWithCSS', false, true);
   document.execCommand('fontName', false, 'wd-mark');
-  const marked = [...desk.querySelectorAll('span[style*="wd-mark"], font[face="wd-mark"]')];
+  let marked = [...desk.querySelectorAll('span[style*="wd-mark"], font[face="wd-mark"]')];
+  if (!marked.length) {
+    wrapRange(range, styles);
+    rememberSelection(desk);
+    return;
+  }
   const keys = Object.keys(styles);
   const spans = marked.map((node) => {
     let span = node;
@@ -188,6 +256,179 @@ function wrapRange(range, styles) {
     span.append(range.extractContents());
     range.insertNode(span);
   }
+}
+
+function stripInlineFontSize(node) {
+  if (!node) return;
+  if (node.nodeType === 1) {
+    node.style?.removeProperty('font-size');
+    if (node.getAttribute?.('style') === '') node.removeAttribute('style');
+    [...node.childNodes].forEach(stripInlineFontSize);
+  }
+}
+
+function onlyFontSizeSpan(span) {
+  if (!span?.style?.fontSize) return false;
+  const rest = span.style.cssText.replace(/font-size:\s*[^;]+;?/gi, '').trim();
+  return !rest;
+}
+
+function setRangeFontSize(range, px) {
+  if (range.collapsed) return null;
+  const common = range.commonAncestorContainer;
+  const host = common.nodeType === 3 ? common.parentElement : common;
+  const wrapper = host?.closest?.('span');
+  if (wrapper && onlyFontSizeSpan(wrapper) && rangeInsideNode(range, wrapper)) {
+    wrapper.style.fontSize = `${px}px`;
+    return wrapper;
+  }
+  const span = document.createElement('span');
+  span.style.fontSize = `${px}px`;
+  try {
+    range.surroundContents(span);
+  } catch {
+    const frag = range.extractContents();
+    stripInlineFontSize(frag);
+    span.appendChild(frag);
+    range.insertNode(span);
+  }
+  return span;
+}
+
+function commitRangeSelection(desk, range) {
+  selection().removeAllRanges();
+  selection().addRange(range);
+  saved = range.cloneRange();
+  holding = false;
+  clearHold();
+  rememberSelection(desk);
+}
+
+function wordRangeAt(range) {
+  const node = range.startContainer;
+  if (node.nodeType !== 3 || !node.textContent?.trim()) return null;
+  const text = node.textContent;
+  let start = range.startOffset;
+  let end = range.startOffset;
+  const isWord = (ch) => /[^\s\u00a0]/.test(ch);
+  while (start > 0 && isWord(text[start - 1])) start -= 1;
+  while (end < text.length && isWord(text[end])) end += 1;
+  if (start >= end) return null;
+  const out = range.cloneRange();
+  out.setStart(node, start);
+  out.setEnd(node, end);
+  return out;
+}
+
+function readFontPx(el, desk) {
+  if (!el || !desk?.contains(el)) return 16;
+  let node = el;
+  while (node && node !== desk) {
+    const inline = node.style?.fontSize;
+    if (inline && /^\d+(\.\d+)?px$/i.test(String(inline).trim())) return Math.round(parseFloat(inline));
+    node = node.parentElement;
+  }
+  return Math.round(parseFloat(window.getComputedStyle(el).fontSize)) || 16;
+}
+
+function styledSpanAt(el, desk) {
+  let node = el;
+  while (node && node !== desk && desk?.contains(node)) {
+    if (node.nodeType === 1 && node.tagName === 'SPAN' && node.style.fontSize) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function rangeInsideNode(range, node) {
+  if (!range || !node) return false;
+  try {
+    return node.contains(range.startContainer) && node.contains(range.endContainer);
+  } catch {
+    return false;
+  }
+}
+
+function activeRange(desk) {
+  const live = rangeIn(desk);
+  if (live) return live;
+  if (!saved) return null;
+  try {
+    if (!desk?.contains(saved.startContainer)) return null;
+    const clone = saved.cloneRange();
+    selection().removeAllRanges();
+    selection().addRange(clone);
+    return clone;
+  } catch {
+    return null;
+  }
+}
+
+export function bumpFontSize(desk, direction, stepPx = 2) {
+  if (!desk) return false;
+  restoreSelection(desk);
+  focusDesk(desk);
+
+  let range = activeRange(desk);
+  if (!range) return false;
+
+  if (range.collapsed) {
+    const word = wordRangeAt(range);
+    if (word) {
+      range = word;
+      selection().removeAllRanges();
+      selection().addRange(range);
+    }
+  }
+
+  const delta = (Number(direction) > 0 ? 1 : -1) * (Math.abs(Number(stepPx)) || 2);
+  const el = anchorElement();
+  if (!el || !desk.contains(el)) return false;
+
+  const styled = styledSpanAt(el, desk);
+  const current = styled
+    ? Math.round(parseFloat(styled.style.fontSize))
+    : readFontPx(el, desk);
+  const next = Math.max(1, Math.min(400, current + delta));
+  if (next === current) return false;
+
+  let target = null;
+  if (!range.collapsed) {
+    target = setRangeFontSize(range, next);
+    const after = document.createRange();
+    after.selectNodeContents(target || range.commonAncestorContainer);
+    if (target) after.collapse(false);
+    else {
+      after.setStart(range.startContainer, range.startOffset);
+      after.setEnd(range.endContainer, range.endOffset);
+    }
+    commitRangeSelection(desk, after);
+    return true;
+  }
+
+  if (styled && onlyFontSizeSpan(styled)) {
+    styled.style.fontSize = `${next}px`;
+    target = styled;
+  } else {
+    const word = wordRangeAt(range);
+    if (word) {
+      target = setRangeFontSize(word, next);
+    } else {
+      applyInlineStyle(desk, { fontSize: `${next}px` });
+      target = styledSpanAt(anchorElement(), desk);
+    }
+  }
+
+  if (target) {
+    const after = document.createRange();
+    after.selectNodeContents(target);
+    after.collapse(false);
+    commitRangeSelection(desk, after);
+    return true;
+  }
+
+  rememberSelection(desk);
+  return true;
 }
 
 export function setMultiRanges(ranges) {

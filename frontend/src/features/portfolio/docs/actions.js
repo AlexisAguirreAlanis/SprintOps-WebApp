@@ -9,7 +9,7 @@ import { createId, parseDocument, serializeDocument, templateDocument } from '..
 import { HEADER_SPACE, PAGE_SIZES, pageMetrics, plainText, uid } from './model';
 import { cleanPastedHtml, escapeHtml, sanitizeHtml, textToHtml } from './sanitize';
 import {
-  anchorElement, applyBlockStyle, applyInlineStyle, caretPosition, computedFormat, currentBlock, exec, insertBlockHtml, insertHtml,
+  anchorElement, applyBlockStyle, applyInlineStyle, bumpFontSize, caretPosition, computedFormat, currentBlock, exec, insertBlockHtml, insertHtml,
   placeCaret, rangeIn, rememberSelection, restoreSelection, savedRange, selectedBlocks, setBlockTag, setMultiRanges, sortBlocks, wordsOf,
 } from './engine/core';
 import { findAll, paintMatches, revealRange, similarFormatRanges } from './engine/find';
@@ -283,12 +283,11 @@ export function createActions(ctx) {
 
   // ---------- Fuente ----------
   actions.growFont = (direction) => {
-    if (!editable()) return;
-    restoreSelection(D());
-    const current = Math.round(parseFloat(window.getComputedStyle(anchorElement() || D()).fontSize)) || 16;
-    const next = direction > 0 ? SIZES.find((size) => size > current) || current + 4 : [...SIZES].reverse().find((size) => size < current) || Math.max(6, current - 2);
-    applyInlineStyle(D(), { fontSize: `${next}px` });
-    ctx.change();
+    if (!editable()) return false;
+    const desk = D();
+    const step = Number(direction) || 0;
+    if (!step) return false;
+    return bumpFontSize(desk, step, 2);
   };
   actions.clearFormat = () => {
     if (!editable()) return;

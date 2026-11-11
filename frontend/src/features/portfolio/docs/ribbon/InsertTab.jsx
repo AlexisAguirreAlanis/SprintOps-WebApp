@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  AtSign, Bookmark, BookOpen, Calendar, Clapperboard, FilePlus2, FileText, FileType2,
-  FileUp, Film, Globe, Hash, Image as ImageIcon, ImagePlus, Images, Link2, ListChecks, Music, Omega, PanelBottom, PanelTop,
-  Paperclip, PenLine, Shapes, Sigma, Smile, Sparkles, SquareSplitVertical, Star, Table2, TextCursorInput,
-  Youtube, BookCopy, Gauge, Users, FileBarChart, ListPlus, Bug, BetweenHorizontalStart, CaseUpper, Layers, Puzzle,
+  Bookmark, BookOpen, Calendar, Clapperboard, FilePlus2, FileType2,
+  FileUp, Film, Globe, Hash, Image as ImageIcon, ImagePlus, Images, Link2, Music, Omega, PanelBottom, PanelTop,
+  Paperclip, PenLine, Shapes, Sigma, Smile, SquareSplitVertical, Star, Table2, TextCursorInput,
+  Youtube, BetweenHorizontalStart, CaseUpper, Layers, Puzzle,
 } from 'lucide-react';
 import { Btn, GridPicker, Group, Item, Menu, ScrollPane, Sep } from '../ui/controls';
 import { SHAPES, SHAPE_GROUPS, shapePreviewSvg } from '../render/shapes';
 import { COVERS, EMOJIS, SPECIAL_CHARS, SYMBOLS } from '../render/blocks';
-import { LIVE_BLOCKS } from '../sprintops';
 import { ILLUSTRATIONS } from '../render/iconLibrary';
 import { renderTex } from '../render/rich';
 
@@ -321,32 +320,6 @@ export default function InsertTab({ api }) {
                   <Item icon={Clapperboard} label="GIF animado…" close={close} onClick={() => api.run('gif')} />
                   <Item icon={Paperclip} label="Archivo adjunto…" close={close} onClick={() => api.run('attachment')} />
                   <Item icon={FileType2} label="Vista previa de PDF…" close={close} onClick={() => api.run('pdfPreview')} />
-                </>
-              )}
-            </Menu>
-          </Tool>
-        </div>
-      </Group>
-
-      <Group label="SprintOps" weight={9}>
-        <div className="wd-tools">
-          <Tool grow={9}>
-            <Menu icon={Sparkles} label="SprintOps" text="SprintOps" width={280} limit={420}>
-              {(close) => (
-                <>
-                  <Sep label="Referencias" />
-                  <Item icon={Bug} label="Referenciar issue (@)" close={close} onClick={() => api.run('mention', 'issue')} />
-                  <Item icon={AtSign} label="Mencionar usuario" close={close} onClick={() => api.run('mention', 'user')} />
-                  <Item icon={Gauge} label="Referenciar sprint" close={close} onClick={() => api.run('mention', 'sprint')} />
-                  <Sep label="Del proyecto" />
-                  {Object.entries(LIVE_BLOCKS).map(([kind, label]) => <Item key={kind} icon={ListChecks} label={label} close={close} onClick={() => api.run('live', kind)} />)}
-                  <Item icon={FileBarChart} label="Generar reporte del proyecto" close={close} onClick={() => api.run('projectReport')} />
-                  <Sep />
-                  <Item icon={ListPlus} label="Convertir selección en issue" close={close} onClick={() => api.run('textToIssue')} />
-                  <Item icon={Sparkles} label="Crear issues desde el documento (IA)" close={close} onClick={() => api.run('aiExtract', 'issues')} />
-                  <Item icon={Users} label="Vincular a sprints, issues o reuniones" close={close} onClick={() => api.run('linkItems')} />
-                  <Item icon={BookCopy} label="Actualizar referencias" close={close} onClick={() => api.run('refreshRefs')} />
-                  <Item icon={FileText} label="Ir al elemento vinculado" close={close} onClick={() => api.openLeft('linked')} />
                 </>
               )}
             </Menu>

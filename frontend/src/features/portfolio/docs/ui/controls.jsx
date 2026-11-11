@@ -136,7 +136,11 @@ export function Btn({ icon: Icon, label, onClick, active = false, disabled = fal
       aria-pressed={active || undefined}
       title={title || label}
       disabled={disabled}
-      onMouseDown={keepFocus}
+      onMouseDown={(event) => {
+        keepFocus(event);
+        const desk = document.querySelector('.wd-desk');
+        if (desk) holdSelection(desk);
+      }}
       onClick={onClick}
       {...rest}
     >
@@ -146,17 +150,17 @@ export function Btn({ icon: Icon, label, onClick, active = false, disabled = fal
   );
 }
 
-export function Group({ label, children, grow = false, weight }) {
+export function Group({ label, children, grow = false, weight, className = '' }) {
   return (
-    <div className={`wd-group${grow ? ' is-grow' : ''}`} style={weight ? { flexGrow: weight } : undefined} role="group" aria-label={label}>
+    <div className={`wd-group${grow ? ' is-grow' : ''}${className ? ` ${className}` : ''}`} style={weight ? { flexGrow: weight } : undefined} role="group" aria-label={label}>
       <div className="wd-group-body">{children}</div>
-      <span className="wd-group-label">{label}</span>
+      {label ? <span className="wd-group-label">{label}</span> : null}
     </div>
   );
 }
 
-export function Row({ children }) {
-  return <div className="wd-row">{children}</div>;
+export function Row({ children, className = '' }) {
+  return <div className={`wd-row${className ? ` ${className}` : ''}`}>{children}</div>;
 }
 
 /** Menú desplegable que se pinta en un portal para no recortarse dentro de la cinta. */
@@ -254,7 +258,16 @@ export function Menu({ icon: Icon, label, text, children, wide = false, active =
         <ChevronDown size={12} className="wd-caret" aria-hidden="true" />
       </button>
       {alive && pos && createPortal(
-        <div ref={panel} className={`wd-pop is-clamped${bare ? ' is-bare' : ''}${menuClass ? ` ${menuClass}` : ''}${open ? '' : ' is-out'}`} role="menu" style={{ left: pos.left, width, maxHeight: pos.maxHeight, ...(pos.up ? { top: 'auto', bottom: pos.bottom } : { top: pos.top }) }} onMouseDown={(event) => { if (!event.target.closest('input, textarea, select, .wd-symbol-tabs, .wd-eq-panel')) event.preventDefault(); }}>
+        <div
+          ref={panel}
+          className={`wd-pop is-clamped${bare ? ' is-bare' : ''}${menuClass ? ` ${menuClass}` : ''}${open ? '' : ' is-out'}`}
+          role="menu"
+          style={{ left: pos.left, width, maxHeight: pos.maxHeight, ...(pos.up ? { top: 'auto', bottom: pos.bottom } : { top: pos.top }) }}
+          onMouseDown={(event) => {
+            if (event.target.closest('input, textarea, select, button, label, a, .wd-symbol-tabs, .wd-eq-panel, .wd-watermark-panel, .wd-colors, .wd-color-studio, .wd-scrollpane-thumb, .wd-range, .wd-slider')) return;
+            event.preventDefault();
+          }}
+        >
           {bare ? (typeof children === 'function' ? children(close) : children) : (
             <ScrollPane maxHeight={Math.max(80, pos.maxHeight - 8)}>{typeof children === 'function' ? children(close) : children}</ScrollPane>
           )}
@@ -298,17 +311,19 @@ export const SWATCHES = [
 export function FontField({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const [alive, setAlive] = useState(false);
-  const [query, setQuery] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
   const [pos, setPos] = useState(null);
   const anchor = useRef(null);
   const panel = useRef(null);
+  const input = useRef(null);
   const needle = String(value || '').replace(/["']/g, '').split(',')[0].trim().toLowerCase();
   const current = needle
     ? FONTS.find(([, name]) => name.toLowerCase() === needle) || FONTS.find(([stack]) => stack.replace(/["']/g, '').split(',')[0].trim().toLowerCase() === needle)
     : null;
   const label = current?.[1] || (needle ? value : 'Fuente');
-  const searching = query.trim() && query.trim().toLowerCase() !== label.toLowerCase();
-  const filtered = searching ? FONTS.filter(([, name]) => name.toLowerCase().includes(query.trim().toLowerCase())) : FONTS;
+  const searching = editing && draft.trim() && draft.trim().toLowerCase() !== label.toLowerCase();
+  const filtered = searching ? FONTS.filter(([, name]) => name.toLowerCase().includes(draft.trim().toLowerCase())) : FONTS;
 
   useEffect(() => {
     if (open) {
@@ -361,24 +376,60 @@ export function FontField({ value, onChange }) {
 
   const choose = (stack) => {
     onChange(stack);
-    setQuery('');
+    setDraft('');
+    setEditing(false);
     setOpen(false);
+    input.current?.blur();
+  };
+
+  const desk = () => document.querySelector('.wd-desk');
+
+  const toggleList = () => {
+    setEditing(false);
+    setDraft('');
+    setOpen((was) => !was);
+    input.current?.blur();
   };
 
   return (
     <span className="wd-picker is-font" ref={anchor}>
-      <input
-        className="wd-font-input"
-        aria-label="Fuente"
-        value={open ? query : label}
-        placeholder={label}
-        onMouseDown={() => holdSelection(document.querySelector('.wd-desk'))}
-        onFocus={(event) => { setQuery(label); setOpen(true); requestAnimationFrame(() => event.target.select()); }}
-        onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && filtered[0]) { event.preventDefault(); choose(filtered[0][0]); }
-        }}
-      />
+      <span className={`wd-font-combo${open ? ' is-open' : ''}`}>
+        <input
+          ref={input}
+          className="wd-font-input"
+          aria-label="Fuente"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          value={editing ? draft : label}
+          onMouseDown={() => holdSelection(desk())}
+          onFocus={(event) => {
+            setEditing(true);
+            setDraft(label);
+            setOpen(true);
+            requestAnimationFrame(() => event.target.select());
+          }}
+          onBlur={(event) => {
+            if (anchor.current?.contains(event.relatedTarget)) return;
+            setEditing(false);
+            setDraft('');
+          }}
+          onChange={(event) => { setDraft(event.target.value); setOpen(true); }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && filtered[0]) { event.preventDefault(); choose(filtered[0][0]); }
+            if (event.key === 'Escape') { event.preventDefault(); setOpen(false); setEditing(false); setDraft(''); event.target.blur(); }
+          }}
+        />
+        <button
+          type="button"
+          className="wd-font-chevron"
+          aria-label="Mostrar fuentes"
+          aria-expanded={open}
+          onMouseDown={(event) => { event.preventDefault(); holdSelection(desk()); }}
+          onClick={toggleList}
+        >
+          <ChevronDown size={10} className="wd-caret" aria-hidden="true" />
+        </button>
+      </span>
       {alive && pos && createPortal(
         <div ref={panel} className={`wd-pop wd-font-pop is-clamped${open ? '' : ' is-out'}`} role="listbox" aria-label="Fuentes" style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}>
           <ScrollPane maxHeight={Math.max(96, pos.maxHeight - 8)}>
@@ -396,9 +447,185 @@ export function FontField({ value, onChange }) {
   );
 }
 
+const DEFAULT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48, 60, 72, 96];
+
+export function SizeField({ value, onChange, sizes = DEFAULT_SIZES, min = 1, max = 400 }) {
+  const [open, setOpen] = useState(false);
+  const [alive, setAlive] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [pos, setPos] = useState(null);
+  const anchor = useRef(null);
+  const panel = useRef(null);
+  const input = useRef(null);
+  const parsed = parseInt(String(value || '').replace(/px/i, ''), 10);
+  const label = Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '—';
+  const searching = editing && draft.trim() && draft.trim() !== label;
+  const filtered = searching
+    ? sizes.filter((size) => String(size).includes(draft.trim()))
+    : sizes;
+
+  useEffect(() => {
+    if (open) {
+      setAlive(true);
+      return undefined;
+    }
+    if (!alive) return undefined;
+    const timer = setTimeout(() => setAlive(false), 150);
+    return () => clearTimeout(timer);
+  }, [open, alive]);
+
+  useLayoutEffect(() => {
+    if (!open || !anchor.current) return undefined;
+    const place = () => {
+      const rect = anchor.current?.getBoundingClientRect();
+      if (!rect) return;
+      const menuWidth = Math.max(76, Math.min(96, rect.width + 24));
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const up = below < 160 && above > below;
+      const maxHeight = Math.max(120, Math.min(220, up ? above : below));
+      setPos({
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8)),
+        width: menuWidth,
+        maxHeight,
+        ...(up ? { top: 'auto', bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4, bottom: 'auto' }),
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    const frame = requestAnimationFrame(() => panel.current?.querySelector('.is-active')?.scrollIntoView({ block: 'nearest' }));
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (event) => {
+      if (!panel.current?.contains(event.target) && !anchor.current?.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event) => { if (event.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const desk = () => document.querySelector('.wd-desk');
+
+  const commit = (raw) => {
+    const next = Math.min(max, Math.max(min, Math.round(Number(raw))));
+    if (!Number.isFinite(next)) return;
+    onChange(String(next));
+    setDraft('');
+    setEditing(false);
+    setOpen(false);
+    input.current?.blur();
+  };
+
+  const toggleList = () => {
+    setEditing(false);
+    setDraft('');
+    setOpen((was) => !was);
+    input.current?.blur();
+  };
+
+  const tryDraft = () => {
+    if (!draft.trim()) return;
+    if (filtered[0] !== undefined && draft.trim() === String(filtered[0])) {
+      commit(filtered[0]);
+      return;
+    }
+    commit(draft);
+  };
+
+  return (
+    <span className="wd-picker is-size" ref={anchor}>
+      <span className={`wd-font-combo is-size${open ? ' is-open' : ''}`}>
+        <input
+          ref={input}
+          className="wd-font-input"
+          aria-label="Tamaño"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          inputMode="numeric"
+          value={editing ? draft : label}
+          onMouseDown={() => holdSelection(desk())}
+          onFocus={(event) => {
+            setEditing(true);
+            setDraft(label === '—' ? '' : label);
+            setOpen(true);
+            requestAnimationFrame(() => event.target.select());
+          }}
+          onBlur={(event) => {
+            if (anchor.current?.contains(event.relatedTarget)) return;
+            if (editing && draft.trim()) tryDraft();
+            setEditing(false);
+            setDraft('');
+          }}
+          onChange={(event) => {
+            const next = event.target.value.replace(/[^\d.]/g, '');
+            setDraft(next);
+            setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              if (draft.trim()) tryDraft();
+              else if (filtered[0] !== undefined) commit(filtered[0]);
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setOpen(false);
+              setEditing(false);
+              setDraft('');
+              event.target.blur();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="wd-font-chevron"
+          aria-label="Mostrar tamaños"
+          aria-expanded={open}
+          onMouseDown={(event) => { event.preventDefault(); holdSelection(desk()); }}
+          onClick={toggleList}
+        >
+          <ChevronDown size={10} className="wd-caret" aria-hidden="true" />
+        </button>
+      </span>
+      {alive && pos && createPortal(
+        <div ref={panel} className={`wd-pop wd-size-pop is-size-menu is-clamped${open ? '' : ' is-out'}`} role="listbox" aria-label="Tamaños" style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxHeight }}>
+          <ScrollPane maxHeight={Math.max(96, pos.maxHeight - 8)}>
+            {filtered.length === 0 && <p className="wd-font-empty">Sin coincidencias</p>}
+            {filtered.map((size) => (
+              <button
+                key={size}
+                type="button"
+                role="option"
+                aria-selected={String(size) === label}
+                className={String(size) === label ? 'is-active' : ''}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => commit(size)}
+              >
+                {size}
+              </button>
+            ))}
+          </ScrollPane>
+        </div>,
+        document.body,
+      )}
+    </span>
+  );
+}
+
 export function ColorMenu({ icon, label, value, onPick, allowNone = false, swatch }) {
   return (
-    <Menu icon={icon} label={label} width={220}>
+    <Menu icon={icon} label={label} width={202}>
       {(close) => (
         <>
           <ColorGrid value={value} onPick={onPick} close={close} allowNone={allowNone} />

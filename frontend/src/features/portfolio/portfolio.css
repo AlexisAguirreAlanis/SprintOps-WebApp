@@ -2236,7 +2236,7 @@ svg.pf-shape-mark.is-line path:last-child {
 }
 
 .ss-toolbar button:hover,
-.wd-ribbon button:hover,
+.wd-ribbon button:hover:not(.wd-font-chevron),
 .wd-ribbon label:hover {
   background: color-mix(in srgb, var(--app-text) 6%, transparent);
 }

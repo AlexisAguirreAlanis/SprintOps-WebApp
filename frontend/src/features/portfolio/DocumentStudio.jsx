@@ -754,8 +754,8 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
         italic: document.queryCommandState('italic'),
         underline: document.queryCommandState('underline'),
         strike: document.queryCommandState('strikeThrough'),
-        sub: document.queryCommandState('subscript'),
-        sup: document.queryCommandState('superscript'),
+        sub: document.queryCommandState('subscript') || Boolean(el?.closest?.('sub')),
+        sup: document.queryCommandState('superscript') || Boolean(el?.closest?.('sup')),
         align: blockStyle?.textAlign || 'left',
         font: (style?.fontFamily || '').split(',')[0].replace(/["']/g, '').trim(),
         size: style ? Math.round(parseFloat(style.fontSize)) : 0,
@@ -1014,6 +1014,12 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
     rightTab: right.open ? right.tab : null, leftOpen: left.open, recentColors: storage.get('recentColors', []), borderPen, setBorderPen,
     autosave, setAutosave: ctx.setAutosave, saveNow: save,
     cmd: (command, value) => { if (!editable) return; trackedFormat(() => exec(deskRef.current, command, value)); change(); },
+    growFont: (direction) => {
+      if (!editable) return;
+      let ok = false;
+      trackedFormat(() => { ok = actions.growFont(direction); });
+      if (ok) change({ noReflow: true });
+    },
     inline: (styles) => {
       if (!editable) return;
       trackedFormat(() => applyInlineStyle(deskRef.current, styles));
@@ -1033,7 +1039,9 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
         toast.error(`Acción no disponible: ${actionName}`);
         return undefined;
       }
-      return Promise.resolve(fn(...args)).catch((err) => toast.error(err?.message || 'No se pudo completar la acción.'));
+      const track = editable && tracking && actionName === 'growFont';
+      const run = () => fn(...args);
+      return Promise.resolve(track ? trackedFormat(run) : run()).catch((err) => toast.error(err?.message || 'No se pudo completar la acción.'));
     },
     openLeft: (tabName) => setLeft({ open: true, tab: tabName }),
     closeLeft: () => setLeft((current) => ({ ...current, open: false })),
@@ -1138,7 +1146,7 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
       s: () => save(), p: () => actions.print(), f: () => actions.find(event.altKey ? null : {}), h: () => actions.find({ replace: true }), g: () => actions.goto(), k: () => actions.link(),
       z: () => (event.shiftKey ? actions.redo() : actions.undo()), y: () => actions.redo(), enter: () => (event.shiftKey ? actions.columnBreak() : actions.pageBreak()),
       l: () => api.cmd('justifyLeft'), e: () => api.cmd('justifyCenter'), r: () => api.cmd('justifyRight'), j: () => api.cmd('justifyFull'),
-      ']': () => actions.growFont(1), '[': () => actions.growFont(-1), ',': () => api.cmd('subscript'), '.': () => api.cmd('superscript'), d: () => actions.fontDialog(),
+      ']': () => api.growFont(1), '[': () => api.growFont(-1), ',': () => api.cmd('subscript'), '.': () => api.cmd('superscript'), d: () => actions.fontDialog(),
       '/': () => actions.shortcuts(), '*': () => setView({ marks: !view.marks }),
     };
     if (event.shiftKey && key === 'c') return void (event.preventDefault(), actions.copyFormat());
@@ -1456,8 +1464,14 @@ function DocumentStudio({ hojaId, user, meta, initialName, revision, doc: initia
                         '--wd-band': '96px',
                       }}
                     >
-                      {wm?.type === 'text' && wm.text && <div className="wd-watermark" aria-hidden="true" style={{ color: wm.color, opacity: wm.opacity, fontSize: wm.size, transform: `translate(-50%, -50%) rotate(${wm.rotate ?? -35}deg)` }}>{wm.text}</div>}
-                      {wm?.type === 'image' && wm.image && <img className="wd-watermark-img" src={wm.image} alt="" aria-hidden="true" style={{ opacity: wm.opacity ?? 0.15, width: `${wm.scale || 50}%` }} />}
+                      {wm?.type === 'text' && wm.text && (
+                        <div className="wd-watermark" aria-hidden="true">
+                          <span style={{ color: wm.color || '#94a3b8', opacity: wm.opacity ?? 0.18, fontSize: wm.size || 96, transform: `rotate(${wm.rotate ?? -35}deg)` }}>{wm.text}</span>
+                        </div>
+                      )}
+                      {wm?.type === 'image' && wm.image && (
+                        <img className="wd-watermark-img" src={wm.image} alt="" aria-hidden="true" style={{ opacity: wm.opacity ?? 0.15, width: `${wm.scale || 50}%` }} />
+                      )}
                       {border?.style && border.style !== 'none' && <div className="wd-page-border" aria-hidden="true" style={{ inset: border.offset ?? 24, border: `${border.width || 2}px ${border.style} ${border.color || '#1e293b'}`, borderRadius: border.radius || 0 }} />}
                       <ChromeField field={headerKey} value={doc[headerKey]} placeholder={doc.differentFirst && index === 0 ? 'Encabezado de primera página' : headerKey === 'headerEven' ? 'Encabezado de página par' : 'Encabezado'} editable={editable} editing={chromeEdit === headerKey} onInput={onChromeInput} />
                       <div className={`wd-body-wrap${doc.columns.count > 1 ? ' has-columns' : ''}`} style={{ '--wd-cols': doc.columns.count, '--wd-col-gap': `${doc.columns.gap}px`, '--wd-col-rule': doc.columns.divider ? '1px solid #cbd5e1' : 'none' }}>

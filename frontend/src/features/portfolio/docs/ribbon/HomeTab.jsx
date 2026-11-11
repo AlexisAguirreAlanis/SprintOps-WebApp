@@ -5,7 +5,7 @@ import {
   TextSelect, ScanText, BetweenHorizontalStart,
 } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
-import { Btn, ColorGrid, FontField, Group, Item, Menu, Row, Select, Sep } from '../ui/controls';
+import { Btn, ColorGrid, FontField, Group, Item, Menu, Row, Sep, SizeField } from '../ui/controls';
 export { FONTS } from '../fonts';
 
 export const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48, 60, 72, 96];
@@ -168,10 +168,10 @@ export default function HomeTab({ api, sel }) {
         <Row>
           <FontField value={sel.font || ''} onChange={(value) => value && api.inline({ fontFamily: value })} />
           <Bar />
-          <Select className="is-size" label="Tamaño" width={0} value={String(sel.size || '')} options={[['', sel.size ? String(sel.size) : '—'], ...SIZES.map((size) => [String(size), String(size)])]} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
+          <SizeField value={String(sel.size || '')} sizes={SIZES} onChange={(value) => value && api.inline({ fontSize: `${value}px` })} />
           <Bar />
-          <Btn icon={AArrowUp} label="Aumentar tamaño (⌘])" onClick={() => api.run('growFont', 1)} />
-          <Btn icon={AArrowDown} label="Disminuir tamaño (⌘[)" onClick={() => api.run('growFont', -1)} />
+          <Btn icon={AArrowUp} label="Aumentar tamaño (⌘])" onClick={() => api.growFont(1)} />
+          <Btn icon={AArrowDown} label="Disminuir tamaño (⌘[)" onClick={() => api.growFont(-1)} />
           <Menu icon={CaseSensitive} label="Mayúsculas y minúsculas" width={250}>
             {(close) => (
               <>

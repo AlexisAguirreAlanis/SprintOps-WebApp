@@ -240,7 +240,211 @@
 .wd-menu-btn:disabled { opacity: 0.4; cursor: default; }
 .wd-menu-btn.is-wide { flex-direction: row; gap: 6px; font-size: 12px; }
 .wd-menu-btn .wd-mini-label { font-size: 10px; color: var(--app-muted); }
-.wd-ribbon-hint { font-size: 10px; color: var(--app-muted); }
+.wd-ribbon-hint { margin: 0; font-size: 10px; line-height: 1.25; color: var(--app-muted); }
+.wd-ribbon:has(.wd-draw-band) > .wd-group {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+}
+.wd-ribbon:has(.wd-draw-band) > .wd-group.wd-draw-tip {
+  flex: 1 1 120px;
+  min-width: 64px;
+  border-right: 0;
+}
+.wd-ribbon:has(.wd-draw-band) > .wd-group.wd-draw-tip .wd-group-body {
+  align-items: stretch;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-group-body {
+  gap: 1px;
+  height: 54px;
+  max-height: 54px;
+  overflow: hidden;
+  justify-content: center;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-row {
+  height: 26px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-btn svg,
+.wd-ribbon:has(.wd-draw-band) .wd-menu-btn .wd-ico svg {
+  width: 16px;
+  height: 16px;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-stepper {
+  height: 26px;
+  border-radius: 6px;
+  background: var(--app-surface);
+  border-color: color-mix(in srgb, var(--app-text) 22%, var(--app-border));
+}
+.wd-ribbon:has(.wd-draw-band) .wd-stepper input {
+  font-size: 10px;
+  font-weight: 700;
+  width: 30px;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-stepper button {
+  width: 18px;
+  font-size: 12px;
+  line-height: 1;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-stepper em {
+  font-size: 9px;
+  padding-right: 1px;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-menu-btn.is-wide {
+  height: 26px;
+  min-height: 26px;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-menu-btn.is-wide > span:not(.wd-ico) {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-menu-btn.is-wide .wd-caret {
+  position: static;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-menu-btn:not(.is-wide) .wd-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.wd-ribbon:has(.wd-draw-band) .wd-ribbon-hint {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  min-height: 0;
+  max-height: 54px;
+  padding: 0 2px;
+  align-self: center;
+}
+.wd-ink-chip {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgb(15 23 42 / 18%);
+  flex: 0 0 auto;
+  position: static;
+  pointer-events: none;
+}
+.wd-ribbon:has(.wd-design-band) > .wd-group {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+}
+.wd-ribbon:has(.wd-design-band) .wd-group-body {
+  gap: 1px;
+  height: 54px;
+  max-height: 54px;
+  overflow: hidden;
+  justify-content: center;
+}
+.wd-ribbon:has(.wd-design-band) .wd-row {
+  height: 26px;
+  align-items: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.wd-ribbon:has(.wd-design-band) .wd-row.wd-design-themes {
+  flex: 0 0 26px;
+  min-width: 0;
+  overflow: hidden;
+}
+.wd-ribbon:has(.wd-design-band) .wd-theme-gallery {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.wd-ribbon:has(.wd-design-band) .wd-theme-card {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  text-align: left;
+  min-width: 0;
+}
+.wd-ribbon:has(.wd-design-band) .wd-theme-card .wd-theme-aa {
+  display: none;
+}
+.wd-ribbon:has(.wd-design-band) .wd-theme-card .wd-theme-strip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 1px;
+  height: 10px;
+  margin: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+.wd-ribbon:has(.wd-design-band) .wd-theme-card .wd-theme-strip b {
+  display: block;
+  width: 7px;
+  height: 10px;
+  border-radius: 1px;
+}
+.wd-ribbon:has(.wd-design-band) .wd-theme-card small {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 7.5em;
+}
+.wd-ribbon:has(.wd-design-band) .wd-btn svg,
+.wd-ribbon:has(.wd-design-band) .wd-menu-btn .wd-ico svg {
+  width: 16px;
+  height: 16px;
+}
+.wd-ribbon:has(.wd-design-band) .wd-menu-btn.is-wide,
+.wd-ribbon:has(.wd-design-band) .wd-btn.is-wide {
+  height: 26px;
+  min-height: 26px;
+  max-width: none;
+  min-width: min-content;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+.wd-ribbon:has(.wd-design-band) .wd-menu-btn.is-wide > span:not(.wd-ico),
+.wd-ribbon:has(.wd-design-band) .wd-btn.is-wide > span {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  max-width: none;
+}
+.wd-ribbon:has(.wd-design-band) .wd-menu-btn.is-wide .wd-caret {
+  position: static;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+}
 
 .wd-pop {
   position: fixed;
@@ -288,6 +492,23 @@
 .wd-pop.is-size-menu .wd-item { justify-content: center; gap: 0; padding: 3px 14px 3px 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .wd-pop.is-size-menu .wd-item-gap { display: none; }
 .wd-pop.is-size-menu .wd-item-label { flex: 0 1 auto; align-items: center; }
+.wd-size-pop { padding: 4px 2px; min-width: 0; }
+.wd-size-pop button {
+  display: block;
+  width: 100%;
+  text-align: center;
+  border: 0;
+  background: transparent;
+  color: var(--app-text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.wd-size-pop button:hover,
+.wd-size-pop button.is-active { background: color-mix(in srgb, var(--app-accent) 16%, transparent); }
 @keyframes wd-pop-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to { opacity: 1; transform: none; }
@@ -358,7 +579,15 @@
 .wd-slider { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
 .wd-slider input { flex: 1; accent-color: var(--app-accent); }
 
-.wd-colors { display: flex; flex-direction: column; gap: 6px; padding: 2px; }
+.wd-pop.is-clamped:has(.wd-colors) {
+  width: 202px !important;
+  min-width: 0;
+  max-width: min(348px, calc(100vw - 24px));
+}
+.wd-pop.is-clamped:has(.wd-colors .wd-swatches.is-marker) {
+  width: 196px !important;
+}
+.wd-colors { display: flex; flex-direction: column; gap: 6px; padding: 2px; width: max-content; max-width: 100%; }
 .wd-color-label { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--app-muted); }
 .wd-color-none { border: 0; background: transparent; text-align: left; font: inherit; font-size: 12px; color: var(--app-text); cursor: pointer; padding: 4px 6px; border-radius: 6px; }
 .wd-color-none:hover { background: color-mix(in srgb, var(--app-text) 6%, transparent); }
@@ -469,7 +698,6 @@
 .wd-ribbon:has(.wd-tools) > .wd-group:nth-child(7) .wd-gallery:nth-child(1) { --wd-min: 51px; }
 .wd-ribbon:has(.wd-tools) > .wd-group:nth-child(7) .wd-gallery:nth-child(2) { --wd-min: 46px; }
 .wd-ribbon:has(.wd-tools) > .wd-group:nth-child(8) .wd-gallery:nth-child(1) { --wd-min: 34px; }
-.wd-ribbon:has(.wd-tools) > .wd-group:nth-child(9) .wd-gallery:nth-child(1) { --wd-min: 56px; }
 .wd-ribbon .wd-tools .wd-gallery > .wd-menu-btn.is-wide,
 .wd-ribbon .wd-tools .wd-gallery > .wd-btn.is-wide {
   display: flex;
@@ -888,7 +1116,88 @@
   white-space: nowrap;
   letter-spacing: 0.06em;
 }
-.wd-watermark-img { position: absolute; inset: 0; background-repeat: no-repeat; background-position: center; pointer-events: none; z-index: 1; }
+.wd-watermark-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 92%;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 1;
+}
+.wd-watermark-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  min-width: 248px;
+  max-height: min(400px, calc(100vh - 80px));
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.wd-watermark-panel > header { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.wd-watermark-panel > header strong { flex: 1; font-size: 13px; letter-spacing: -0.01em; color: var(--app-text); }
+.wd-watermark-panel .wd-wm-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--app-accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.wd-watermark-panel .wd-wm-back:hover { background: color-mix(in srgb, var(--app-accent) 12%, transparent); }
+.wd-watermark-panel .wd-wm-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 650; color: var(--app-muted); }
+.wd-watermark-panel .wd-wm-field > .wd-input { width: 100%; box-sizing: border-box; height: 30px; }
+.wd-watermark-panel .wd-wm-field .wd-stepper { width: 100% !important; height: 30px; border: 1px solid var(--app-border); border-radius: 7px; background: var(--app-surface); }
+.wd-watermark-panel .wd-wm-field .wd-stepper input { font-size: 12.5px; font-weight: 650; }
+.wd-watermark-panel .wd-wm-field .wd-slider { width: 100%; font-size: 11px; color: var(--app-muted); }
+.wd-watermark-panel .wd-wm-field .wd-slider input[type='range'] { flex: 1; min-width: 0; height: 4px; accent-color: var(--app-accent); cursor: pointer; }
+.wd-watermark-panel .wd-wm-field .wd-slider em { min-width: 2.5em; text-align: right; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wd-watermark-panel .wd-wm-swatches { grid-template-columns: repeat(8, 20px); gap: 5px; }
+.wd-watermark-panel .wd-wm-swatches .wd-swatch { width: 20px; height: 20px; border-radius: 6px; }
+.wd-watermark-panel .wd-wm-seg {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--app-text) 6%, var(--app-bg));
+}
+.wd-watermark-panel .wd-wm-seg button {
+  flex: 1;
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--app-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.wd-watermark-panel .wd-wm-seg button.is-on {
+  background: var(--app-surface);
+  color: var(--app-accent);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+}
+.wd-watermark-panel .wd-wm-type { display: flex; gap: 4px; padding: 2px; border-radius: 9px; background: color-mix(in srgb, var(--app-text) 6%, var(--app-bg)); }
+.wd-watermark-panel .wd-wm-type button { flex: 1; border: 0; border-radius: 7px; padding: 5px 8px; font: inherit; font-size: 12px; font-weight: 700; color: var(--app-muted); background: transparent; cursor: pointer; }
+.wd-watermark-panel .wd-wm-type button.is-on { background: var(--app-surface); color: var(--app-accent); box-shadow: 0 1px 3px rgb(15 23 42 / 12%); }
+.wd-watermark-panel .wd-wm-pick { width: 100%; border-radius: 8px; border: 1px dashed color-mix(in srgb, var(--app-text) 22%, var(--app-border)); background: color-mix(in srgb, var(--app-text) 3%, var(--app-surface)); }
+.wd-watermark-panel .wd-wm-hint { font-size: 11px; margin: -4px 2px 0; }
+.wd-watermark-panel .wd-wm-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--app-border); }
+.wd-watermark-panel .wd-wm-actions .wd-btn { font-size: 12px; padding: 5px 12px; min-height: 30px; }
+.wd-pop.is-watermark-menu {
+  width: min(280px, calc(100vw - 24px)) !important;
+  max-height: min(440px, calc(100vh - 20px)) !important;
+}
 .wd-page-border { position: absolute; pointer-events: none; z-index: 2; border-color: #1e293b; }
 
 .wd-ruler { position: absolute; background: var(--app-surface); color: var(--app-muted); z-index: 5; user-select: none; }
@@ -947,10 +1256,92 @@
 .wd-picker { display: inline-flex; min-width: 0; flex: 0 0 auto; }
 .wd-ribbon .wd-row { width: 100%; }
 .wd-ribbon .wd-picker.is-font { flex: 1 1 140px; width: auto; min-width: 112px; max-width: none; }
-.wd-ribbon .wd-picker.is-size { flex: 0 0 54px; width: 54px; }
+.wd-ribbon .wd-picker.is-size { flex: 0 0 58px; width: 58px; min-width: 52px; max-width: 68px; }
+.wd-ribbon .wd-picker.is-size .wd-font-combo.is-size .wd-font-input {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  padding: 0 0 0 6px;
+  font-size: 12.5px;
+}
+.wd-font-combo {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--app-text) 28%, var(--app-border));
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+.wd-font-combo:hover:not(.is-open):not(:focus-within) {
+  background: color-mix(in srgb, var(--app-text) 6%, #fff);
+}
+.wd-font-combo:hover:not(.is-open):not(:focus-within) .wd-font-chevron { color: var(--app-text); }
+.wd-font-combo:focus-within,
+.wd-font-combo.is-open {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 24%, transparent);
+}
+.wd-font-combo .wd-font-input {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  padding: 0 6px 0 8px;
+  box-shadow: none;
+}
+.wd-font-combo .wd-font-input:focus { outline: none; border-color: transparent; box-shadow: none; }
+.wd-font-chevron {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 100%;
+  margin: 0;
+  padding: 0 4px 0 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+}
+.wd-font-chevron:hover,
+.wd-font-chevron:focus-visible,
+.wd-ribbon .wd-font-chevron:hover,
+.wd-font-combo:hover .wd-font-chevron,
+.wd-font-combo:hover .wd-font-chevron:hover {
+  background: transparent !important;
+}
+.wd-ribbon .wd-font-chevron {
+  min-height: 0;
+  padding: 0 4px 0 0;
+  gap: 0;
+  border-radius: 0;
+  font-weight: inherit;
+  font-size: inherit;
+}
+.wd-font-chevron .wd-caret { width: 10px; height: 10px; flex: 0 0 auto; }
+.wd-ribbon .wd-font-chevron .wd-caret { width: 8px; height: 8px; }
+.wd-ribbon .wd-font-combo .wd-font-input { padding-right: 0; }
+.wd-ribbon .wd-font-combo:hover:not(.is-open):not(:focus-within) {
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  border-color: transparent;
+}
 .wd-font-input { width: 100%; height: 26px; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--app-text) 28%, var(--app-border)); border-radius: 6px; background: #fff; color: var(--app-text); font: inherit; font-size: 12.5px; font-weight: 650; padding: 0 8px; }
 .wd-font-input:focus { outline: none; border-color: var(--app-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 24%, transparent); }
-.wd-ribbon .wd-picker.is-size .wd-menu-btn { background: #fff; border: 1px solid color-mix(in srgb, var(--app-text) 28%, var(--app-border)); border-radius: 6px; }
 .wd-vbar { width: 1px; height: 16px; margin: 0 3px; background: color-mix(in srgb, var(--app-text) 22%, transparent); flex: 0 0 1px; }
 .wd-font-pop { display: flex; flex-direction: column; max-height: 248px; padding: 4px 2px 4px 4px; overflow: hidden; }
 .wd-font-pop .wd-scrollpane-body { padding-right: 12px; }
@@ -1363,7 +1754,9 @@ button.wd-list-row:hover, .wd-list-row.is-active { background: color-mix(in srgb
 .wd-bubble .wd-menu-btn { flex-direction: row; padding: 5px 6px; min-width: 0; }
 .wd-bubble .wd-picker.is-font { flex: 1 1 120px; width: 132px; min-width: 108px; max-width: 160px; }
 .wd-bubble .wd-picker.is-size { width: 58px; flex: 0 0 58px; }
-.wd-bubble .wd-font-input, .wd-bubble .wd-picker.is-size .wd-menu-btn { height: 28px; border: 1px solid color-mix(in srgb, var(--app-text) 22%, var(--app-border)); border-radius: 7px; background: #fff; }
+.wd-bubble .wd-font-combo { height: 28px; border: 1px solid color-mix(in srgb, var(--app-text) 22%, var(--app-border)); border-radius: 7px; background: #fff; }
+.wd-bubble .wd-font-combo .wd-font-input { border: 0; box-shadow: none; background: transparent; }
+.wd-bubble .wd-picker.is-size .wd-font-combo.is-size .wd-font-input { text-align: center; font-variant-numeric: tabular-nums; }
 .wd-bubble-select {
   font: inherit; font-size: 11.5px; border: 1px solid var(--app-border); border-radius: 6px;
   background: var(--app-surface); color: var(--app-text); padding: 3px 4px; max-width: 110px;
