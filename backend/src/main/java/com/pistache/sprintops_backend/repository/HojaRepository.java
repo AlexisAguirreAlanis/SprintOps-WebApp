@@ -11,5 +11,7 @@ import java.util.List;
 public interface HojaRepository extends JpaRepository<Hoja, Integer> {
     List<Hoja> findByPropietario_IdUsuario(Integer usuarioId);
 
+    List<Hoja> findByProyecto_IdProyecto(Integer projectId);
+
     List<Hoja> findByProyecto_Equipo_IdEquipoIn(Collection<Integer> equipoIds);
 }

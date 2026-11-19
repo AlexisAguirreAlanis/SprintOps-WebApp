@@ -16,6 +16,7 @@ import ProfilePage from '../features/profile/ProfilePage';
 import AppearancePage from '../features/settings/AppearancePage';
 import LanguagePage from '../features/settings/LanguagePage';
 import PlanPage from '../features/settings/PlanPage';
+import AiSettingsPage from '../features/settings/AiSettingsPage';
 import PortfolioPage from '../features/portfolio/PortfolioPage';
 import PortfolioEditorPage from '../features/portfolio/PortfolioEditorPage';
 import IssueUniversePage from '../features/issueUniverse/IssueUniversePage';
@@ -83,6 +84,7 @@ const AppRouter = () => {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="settings/idioma" element={<LanguagePage />} />
         <Route path="settings/apariencia" element={<AppearancePage />} />
+        <Route path="settings/ia" element={<AiSettingsPage />} />
         <Route path="settings/plan" element={<PlanPage />} />
         <Route path="portafolio" element={<PortfolioPage />} />
         <Route path="portafolio/:hojaId" element={<PortfolioEditorPage />} />

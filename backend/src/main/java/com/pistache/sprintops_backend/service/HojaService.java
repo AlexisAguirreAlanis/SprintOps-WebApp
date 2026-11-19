@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -288,6 +289,82 @@ public class HojaService {
             results.add(item);
         }
         return results;
+    }
+
+    /** Texto corto de un documento mencionado. Null si no es de este proyecto o no se puede ver. */
+    @Transactional(readOnly = true)
+    public String mentionText(Integer userId, Integer projectId, Integer documentId) {
+        if (userId == null || projectId == null || documentId == null) return null;
+        Hoja hoja = hojaRepository.findById(documentId).orElse(null);
+        if (!visibleInProject(hoja, userId, projectId)) return null;
+        String text = plainText(hoja.getDocumento()).replace('\n', ' ');
+        if (text.length() > 700) text = text.substring(0, 700);
+        String name = hoja.getNombre() == null ? "" : hoja.getNombre().replace('\n', ' ').replace("\"", "'");
+        return "Documento documento_id=" + hoja.getIdHoja() + " nombre=\"" + name + "\" texto=\"" + text + "\"";
+    }
+
+    /** Nombres de hojas de este proyecto que la persona puede abrir. No incluye el cuerpo. */
+    @Transactional(readOnly = true)
+    public List<String> visibleDocumentNames(Integer userId, Integer projectId) {
+        List<String> lines = new ArrayList<>();
+        if (userId == null || projectId == null) return lines;
+        for (Hoja hoja : hojaRepository.findByProyecto_IdProyecto(projectId)) {
+            if (!visibleInProject(hoja, userId, projectId)) continue;
+            String name = hoja.getNombre() == null ? "" : hoja.getNombre();
+            lines.add("documento_id=" + hoja.getIdHoja() + " nombre=\"" + name + "\"");
+            if (lines.size() >= 40) break;
+        }
+        return lines;
+    }
+
+    /**
+     * Fragmentos cortos de los documentos de este proyecto que la persona puede ver.
+     * No devuelve el documento completo.
+     */
+    @Transactional(readOnly = true)
+    public List<String> matchingDocumentSnippets(Integer userId, Integer projectId, String query) {
+        List<String> lines = new ArrayList<>();
+        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        if (userId == null || projectId == null || needle.length() < 3) return lines;
+        for (Hoja hoja : hojaRepository.findByProyecto_IdProyecto(projectId)) {
+            if (!visibleInProject(hoja, userId, projectId)) continue;
+            String name = hoja.getNombre() == null ? "" : hoja.getNombre();
+            String text = plainText(hoja.getDocumento());
+            String haystack = (name + "\n" + text).toLowerCase(Locale.ROOT);
+            if (!mentions(haystack, needle)) continue;
+            String body = text.toLowerCase(Locale.ROOT);
+            int at = body.indexOf(needle);
+            String snippet;
+            if (at >= 0) {
+                int from = Math.max(0, at - 40);
+                snippet = text.substring(from, Math.min(text.length(), at + needle.length() + 100)).trim();
+            } else if (name.toLowerCase(Locale.ROOT).contains(needle)) {
+                snippet = name;
+            } else {
+                snippet = text.substring(0, Math.min(120, text.length())).trim();
+            }
+            snippet = snippet.replace('\n', ' ').replace('"', '\'');
+            lines.add("documento_id=" + hoja.getIdHoja() + " nombre=\"" + name + "\" fragmento=\"" + snippet + "\"");
+            if (lines.size() >= 3) break;
+        }
+        return lines;
+    }
+
+    private boolean visibleInProject(Hoja hoja, Integer userId, Integer projectId) {
+        return hoja != null
+                && !hoja.isEliminada()
+                && !hoja.isArchivada()
+                && hoja.getProyecto() != null
+                && projectId.equals(hoja.getProyecto().getIdProyecto())
+                && canView(hoja, userId);
+    }
+
+    private static boolean mentions(String haystack, String needle) {
+        if (haystack.contains(needle)) return true;
+        for (String token : needle.split("\\s+")) {
+            if (token.length() >= 4 && haystack.contains(token)) return true;
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)

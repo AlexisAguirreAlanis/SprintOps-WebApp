@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
   Plus,
   Settings,
+  Sparkles,
   Target,
   Users,
   Waypoints,
@@ -38,6 +39,7 @@ import { portfolioRepository } from '../../data/repositories/portfolioRepository
 import CreateSheetModal from '../portfolio/CreateSheetModal';
 import { templateDocument } from '../portfolio/portfolioDocument';
 import ProjectNotes from './ProjectNotes';
+import ProjectAiPane from './ai/ProjectAiPane';
 import ProjectScroll from '../home/ProjectScroll';
 import { formatShortDate, modeLabel, progressInfo } from '../home/projectModel';
 import { issueStatsBySprint, PROJECT_PHASE_LABEL, projectHubPhase } from './projectHub';
@@ -57,6 +59,7 @@ const TABS = [
   ['notes', 'Notas', StickyNote],
   ['team', 'Equipo', Users],
   ['metrics', 'Métricas', BarChart3],
+  ['ai', 'IA', Sparkles],
 ];
 
 const VIEWS = [
@@ -287,7 +290,7 @@ const SprintsPage = () => {
       </div>
 
       <div className="ph-stage" ref={stageRef}>
-        <div key={visibleTab} className={`ph-pane${leaving ? ' is-leaving' : ' is-entering'}${visibleTab === 'notes' ? ' is-notes' : ''}${visibleTab === 'documents' ? ' is-top' : ''}`}>
+        <div key={visibleTab} className={`ph-pane${leaving ? ' is-leaving' : ' is-entering'}${visibleTab === 'notes' ? ' is-notes' : ''}${visibleTab === 'documents' || visibleTab === 'ai' ? ' is-top' : ''}`}>
         {isLoading ? (
           <LoadingSpinner label="Cargando el proyecto..." />
         ) : visibleTab === 'sprints' ? (
@@ -358,6 +361,8 @@ const SprintsPage = () => {
           </div>
         ) : visibleTab === 'notes' ? (
           <ProjectNotes projectId={projectId} userId={user?.id} />
+        ) : visibleTab === 'ai' ? (
+          <ProjectAiPane projectId={projectId} userId={user?.id} projectName={project?.name || 'este proyecto'} />
         ) : visibleTab === 'team' ? (
           <section className="ph-panel">
             <h2>Equipo</h2>

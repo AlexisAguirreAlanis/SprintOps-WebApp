@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Briefcase, ChartColumn, ChevronDown, ChevronLeft, CircleUser, Folder, House, Languages, LogOut, Palette, Settings, X } from 'lucide-react';
+import { Briefcase, ChartColumn, ChevronDown, ChevronLeft, CircleUser, Folder, House, Languages, LogOut, Palette, Settings, Sparkles, X } from 'lucide-react';
 import Avatar from './Avatar';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useProjects } from '../features/project/hooks/useProjects';
@@ -16,6 +16,7 @@ const SETTINGS = [
   { to: '/profile', label: 'Perfil', icon: CircleUser, match: ['/profile'] },
   { to: '/settings/idioma', label: 'Idioma', icon: Languages, match: ['/settings/idioma'] },
   { to: '/settings/apariencia', label: 'Apariencia', icon: Palette, match: ['/settings/apariencia'] },
+  { to: '/settings/ia', label: 'Ajustes de IA', icon: Sparkles, match: ['/settings/ia'] },
   { to: '/settings/plan', label: 'Plan & Uso', icon: ChartColumn, match: ['/settings/plan'] },
 ];
 

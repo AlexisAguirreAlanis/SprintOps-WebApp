@@ -40,6 +40,10 @@ public class ChatbotToolExecutor {
     @Autowired
     private SprintRepository sprintRepository;
     @Autowired
+    private ProjectContextRetriever contextRetriever;
+    @Autowired
+    private AiActionService actionService;
+    @Autowired
     private IssuesService issuesService;
     @Autowired
     private IssuesRepository issuesRepository;
@@ -87,12 +91,33 @@ public class ChatbotToolExecutor {
             return "Error: herramienta sin nombre.";
         }
         JsonNode a = args != null ? args : tools.jackson.databind.node.MissingNode.getInstance();
+        String foreign = foreignScope(a, projectId);
+        if (foreign != null) {
+            return foreign;
+        }
+        AiToolGuard.Gate gate = AiToolGuard.open(toolName, a, userId, (uid, permission) -> perm(uid, projectId, permission));
+        if (!gate.ok()) {
+            return gate.error();
+        }
         try {
-            return switch (toolName) {
+            return switch (gate.operation()) {
                 case "list_my_assigned_issues" -> listMyAssignedIssues(projectId, userId);
                 case "list_my_assigned_issues_in_sprint" -> listMyAssignedIssuesInSprint(projectId, userId, a);
                 case "list_sprint_issues" -> listSprintIssues(projectId, userId, a);
                 case "list_project_sprints" -> listProjectSprints(projectId, userId);
+                case "list_project_documents" -> contextRetriever.documents(projectId, userId);
+                case "search_project_context" -> contextRetriever.retrieve(projectId, userId, a.path("query").asText(""));
+                case "list_project_notes" -> contextRetriever.notes(projectId, userId);
+                case "list_project_team" -> contextRetriever.team(projectId, userId);
+                case "list_project_meetings" -> contextRetriever.meetings(projectId, userId);
+                case "create_project_note" -> actionService.createNote(projectId, userId, strArg(a, "text"));
+                case "create_project_document" -> actionService.createDocument(projectId, userId, strArg(a, "name"), stringArrayArg(a, "blocks"));
+                case "append_document_section" -> actionService.appendSection(projectId, userId, intArg(a, "document_id"), strArg(a, "heading"), strArg(a, "body"));
+                case "replace_document_section" -> actionService.replaceSection(projectId, userId, intArg(a, "document_id"), strArg(a, "heading"), strArg(a, "body"));
+                case "add_document_table" -> actionService.addTable(projectId, userId, intArg(a, "document_id"), strArg(a, "caption"), stringArrayArg(a, "columns"), stringArrayArg(a, "rows"));
+                case "summarize_project_document" -> actionService.summarizeDocument(projectId, userId, intArg(a, "document_id"));
+                case "save_retro_item" -> actionService.saveRetro(projectId, userId, intArg(a, "sprint_id"), strArg(a, "good"), strArg(a, "bad"), strArg(a, "improve"));
+                case "analyze_sprint_health" -> actionService.analyze(projectId, userId, intArg(a, "sprint_id"));
                 case "find_issues" -> findIssues(projectId, userId, a);
                 case "get_issue_detail" -> getIssueDetail(projectId, userId, a);
                 case "get_issue_change_history" -> getIssueHistory(projectId, userId, a);
@@ -128,6 +153,41 @@ public class ChatbotToolExecutor {
         } catch (Exception e) {
             return "Error ejecutando " + toolName + ": " + e.getMessage();
         }
+    }
+
+    /** Rechaza ids que el modelo intente colar de otro proyecto. El projectId de la petición no se sustituye. */
+    private String foreignScope(JsonNode args, Integer projectId) {
+        Integer claimed = intField(args, "project_id");
+        if (claimed == null) claimed = intField(args, "proyecto_id");
+        if (claimed == null) claimed = intField(args, "projectId");
+        if (claimed != null && !claimed.equals(projectId)) {
+            return "Esa operación no pertenece a este proyecto.";
+        }
+        for (String key : List.of("sprint_id", "from_sprint_id", "to_sprint_id")) {
+            Integer sprintId = intField(args, key);
+            if (sprintId != null && !sprintInProject(sprintId, projectId)) {
+                return "Ese sprint no pertenece a este proyecto.";
+            }
+        }
+        Integer issueId = intField(args, "issue_id");
+        if (issueId != null && !issueInProject(issueId, projectId)) {
+            return "Esa tarea no pertenece a este proyecto.";
+        }
+        return null;
+    }
+
+    private static Integer intField(JsonNode node, String key) {
+        if (node == null || !node.has(key) || node.get(key).isNull()) return null;
+        JsonNode value = node.get(key);
+        if (value.isNumber()) return value.asInt();
+        if (value.isTextual()) {
+            try {
+                return Integer.valueOf(value.asText().trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private boolean perm(Integer uid, Integer pid, String p) {
@@ -694,6 +754,11 @@ public class ChatbotToolExecutor {
         issue.setPrioridadIssue(Optional.ofNullable(strArg(a, "priority")).orElse("Medium"));
         issue.setStoryPointsIssue(intArg(a, "story_points") != null ? intArg(a, "story_points") : 0);
         issue.setFechaCreacionIssue(LocalDate.now());
+        if (strArg(a, "due_date") != null) {
+            LocalDate due = dateArg(a, "due_date", null);
+            if (due == null) return "due_date debe usar el formato yyyy-MM-dd.";
+            issue.setFechaFinIssue(due);
+        }
         proyectoService.findById(projectId).ifPresent(issue::setProyecto);
 
         Sprint linked = null;
@@ -745,6 +810,16 @@ public class ChatbotToolExecutor {
         }
         if (a.has("story_points") && !a.get("story_points").isNull()) {
             issue.setStoryPointsIssue(intArg(a, "story_points"));
+        }
+        if (strArg(a, "due_date") != null) {
+            LocalDate due = dateArg(a, "due_date", null);
+            if (due == null) return "due_date debe usar el formato yyyy-MM-dd.";
+            issue.setFechaFinIssue(due);
+        }
+        if (a.has("estimated_hours") && !a.get("estimated_hours").isNull()) {
+            double hours = a.get("estimated_hours").asDouble();
+            if (hours < 0 || hours > 999) return "estimated_hours debe estar entre 0 y 999.";
+            issue.setHorasEstimadas(java.math.BigDecimal.valueOf(hours));
         }
         issuesService.save(issue);
         return "Issue #" + id + " actualizado.";

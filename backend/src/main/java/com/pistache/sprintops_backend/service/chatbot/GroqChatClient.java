@@ -8,12 +8,18 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -171,5 +177,121 @@ public class GroqChatClient {
 
     public String getModel() {
         return model;
+    }
+
+    /**
+     * Lee el stream real de Groq. El contenido visible se entrega en {@code onContent}
+     * conforme llega; los argumentos de herramientas no se reenvían.
+     */
+    public ObjectNode streamRound(JsonNode bodyJson, GroqDeltaHandler handler, int[] usage) throws Exception {
+        if (!isConfigured()) {
+            throw new IllegalStateException("GROQ_API_KEY no configurada");
+        }
+        ObjectNode body = objectMapper.readValue(objectMapper.writeValueAsString(bodyJson), ObjectNode.class);
+        body.put("stream", true);
+        body.putObject("stream_options").put("include_usage", true);
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(GROQ_URL))
+                .timeout(Duration.ofSeconds(120))
+                .header("Authorization", "Bearer " + apiKey.trim())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<java.io.InputStream> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream());
+        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+            String errBody = new String(resp.body().readAllBytes(), StandardCharsets.UTF_8);
+            throw new IllegalStateException(userFacingErrorMessage(resp.statusCode(), errBody));
+        }
+        StringBuilder content = new StringBuilder();
+        TreeMap<Integer, ToolAcc> tools = new TreeMap<>();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(resp.body(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (handler.isCancelled()) {
+                    throw new AiStreamCancelled();
+                }
+                if (!line.startsWith("data:")) {
+                    continue;
+                }
+                String data = line.substring(5).trim();
+                if (data.isEmpty()) {
+                    continue;
+                }
+                if ("[DONE]".equals(data)) {
+                    break;
+                }
+                JsonNode chunk = objectMapper.readTree(data);
+                JsonNode usageNode = chunk.get("usage");
+                if (usage != null && usageNode != null && !usageNode.isNull()) {
+                    usage[0] = usageNode.path("prompt_tokens").asInt(0);
+                    usage[1] = usageNode.path("completion_tokens").asInt(0);
+                }
+                JsonNode delta = chunk.path("choices").path(0).path("delta");
+                if (delta.hasNonNull("content")) {
+                    String text = delta.get("content").asText("");
+                    if (!text.isEmpty()) {
+                        content.append(text);
+                        handler.onContent(text);
+                    }
+                }
+                JsonNode toolCalls = delta.get("tool_calls");
+                if (toolCalls != null && toolCalls.isArray()) {
+                    for (JsonNode call : toolCalls) {
+                        int index = call.path("index").asInt(0);
+                        ToolAcc acc = tools.computeIfAbsent(index, key -> new ToolAcc());
+                        if (call.hasNonNull("id")) {
+                            acc.id = call.get("id").asText(acc.id);
+                        }
+                        JsonNode fn = call.path("function");
+                        if (fn.hasNonNull("name") && !fn.get("name").asText("").isEmpty()) {
+                            boolean first = acc.name.isEmpty();
+                            acc.name = acc.name + fn.get("name").asText("");
+                            if (first) {
+                                handler.onToolName(acc.name);
+                            }
+                        }
+                        if (fn.has("arguments") && !fn.get("arguments").isNull()) {
+                            acc.args.append(fn.get("arguments").asText(""));
+                        }
+                    }
+                }
+            }
+        }
+        ObjectNode message = objectMapper.createObjectNode();
+        message.put("role", "assistant");
+        if (content.isEmpty()) {
+            message.putNull("content");
+        } else {
+            message.put("content", content.toString());
+        }
+        if (!tools.isEmpty()) {
+            ArrayNode calls = objectMapper.createArrayNode();
+            for (ToolAcc acc : tools.values()) {
+                ObjectNode call = objectMapper.createObjectNode();
+                call.put("id", acc.id == null ? "" : acc.id);
+                call.put("type", "function");
+                ObjectNode fn = objectMapper.createObjectNode();
+                fn.put("name", acc.name == null ? "" : acc.name);
+                fn.put("arguments", acc.args.toString());
+                call.set("function", fn);
+                calls.add(call);
+            }
+            message.set("tool_calls", calls);
+        }
+        return message;
+    }
+
+    public interface GroqDeltaHandler {
+        void onContent(String text);
+
+        void onToolName(String name);
+
+        boolean isCancelled();
+    }
+
+    private static final class ToolAcc {
+        private String id = "";
+        private String name = "";
+        private final StringBuilder args = new StringBuilder();
     }
 }

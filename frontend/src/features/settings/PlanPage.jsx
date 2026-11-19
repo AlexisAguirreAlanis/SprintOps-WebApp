@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
-import { ChartColumn, Check, Clock3, Folder, Zap } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChartColumn, Check, Clock3, Folder, Sparkles, Zap } from 'lucide-react';
 import { useAuth } from '../auth/hooks/useAuth';
 import { useProjects } from '../project/hooks/useProjects';
 import { projectPhase } from '../home/projectModel';
+import { loadAiSettings } from '../sprint/ai/aiConversations';
 
 const ROLE_LABEL = {
   developer: 'Developer',
@@ -13,6 +14,22 @@ const ROLE_LABEL = {
 const PlanPage = () => {
   const { user } = useAuth();
   const { projects, isLoading, error } = useProjects(user?.id);
+  const [aiPlans, setAiPlans] = useState(null);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let active = true;
+    loadAiSettings(user.id)
+      .then((settings) => {
+        if (active) setAiPlans(settings);
+      })
+      .catch(() => {
+        if (active) setAiPlans(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const usage = useMemo(() => {
     const counts = { active: 0, upcoming: 0, completed: 0, archived: 0 };
@@ -87,6 +104,29 @@ const PlanPage = () => {
                 );
               })}
             </div>
+            {aiPlans?.credits?.plans?.length > 0 && (
+              <section className="grid gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} />
+                  <h2 className="text-lg font-black">Planes de SprintOps AI</h2>
+                </div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--app-muted)' }}>
+                  Tu plan actual es {aiPlans.credits.personal.planLabel || 'Free'}. Los créditos incluidos se renuevan cada mes.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {aiPlans.credits.plans.map((plan) => (
+                    <div key={plan.id} className="ps-metric">
+                      <span>
+                        <span className="block text-lg font-black">{plan.label}</span>
+                        <span className="mt-1 block text-sm font-semibold" style={{ color: 'var(--app-muted)' }}>
+                          {plan.credits} créditos al mes
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             {usage.issuesKnown && !isLoading && (
               <p className="text-sm font-semibold" style={{ color: 'var(--app-muted)' }}>
                 {usage.issuesDone} de {usage.issuesTotal} issues completados en tus proyectos.
