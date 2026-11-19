@@ -18,6 +18,7 @@ import { useProjects } from '../project/hooks/useProjects';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
 import { useDismiss } from '../home/useDismiss';
+import ProjectPhaseTabs from '../home/ProjectPhaseTabs';
 import { editedLabel, listStripTemplates, listTemplateCatalog, templateDocument } from './portfolioDocument';
 import TemplateGallery from './TemplateGallery';
 import CreateSheetModal from './CreateSheetModal';
@@ -486,13 +487,12 @@ const PortfolioPage = () => {
       </div>
 
       <div className="mb-3 flex shrink-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <div className="ps-tabs" role="tablist">
-          {FILTERS.map((item) => (
-            <button key={item.id} type="button" className={filter === item.id ? 'is-active' : ''} onClick={() => setFilter(item.id)}>
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <ProjectPhaseTabs
+          phases={FILTERS}
+          tab={filter}
+          onChange={setFilter}
+          ariaLabel="Filtrar hojas"
+        />
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <label className={`pf-sheet-search${query ? ' has-query' : ''}`}>
             <Search size={16} />
@@ -534,6 +534,7 @@ const PortfolioPage = () => {
       </div>
 
       <div ref={sheetsRef} className="pf-sheets scroll-edge-fade">
+      <div key={`${filter}-${view}`} className="ps-projects-stage">
       {loading ? (
         <div className={view === 'list' ? 'pf-list' : 'pf-grid'}>
           {Array.from({ length: 3 }, (_, index) => <div key={index} className="ps-skeleton h-56" />)}
@@ -584,6 +585,7 @@ const PortfolioPage = () => {
           ))}
         </div>
       )}
+      </div>
       </div>
       <TemplateGallery
         open={galleryOpen}

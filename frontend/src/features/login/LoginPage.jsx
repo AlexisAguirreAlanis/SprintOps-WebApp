@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { User } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import apiClient from '../../data/api/apiClient';
@@ -8,7 +9,7 @@ import LoginForm from './LoginForm';
 const LoginPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { completeOAuthLogin } = useAuth();
+  const { completeOAuthLogin, authReady } = useAuth();
   const oauthStarted = useRef(false);
 
   useEffect(() => {
@@ -51,20 +52,37 @@ const LoginPage = () => {
     })();
   }, [searchParams, setSearchParams, navigate, completeOAuthLogin]);
 
+  if (!authReady) {
+    return (
+      <div className="flex h-full flex-col bg-[#F0EFED] font-sans">
+        <header className="w-full h-[80px] bg-[#2B2B2B] flex items-center justify-center shrink-0 shadow-sm px-4">
+          <img
+            src="/logo-pistache.svg"
+            alt="Pistache"
+            className="h-14 w-auto max-h-[64px] object-contain"
+          />
+        </header>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col bg-[#F0EFED] font-sans">
       {/* Header Section */}
       <header className="w-full h-[80px] bg-[#2B2B2B] flex items-center justify-center shrink-0 shadow-sm px-4">
         <img
-          src="/logo-pistache.png"
+          src="/logo-pistache.svg"
           alt="Pistache"
           className="h-14 w-auto max-h-[64px] object-contain"
         />
       </header>
 
       {/* Main Content - Centered Card */}
-      <main className="flex-1 flex items-center justify-center p-4">
-        <div className="bg-white w-[420px] rounded-[24px] p-[40px] shadow-md relative animate-in fade-in zoom-in duration-300">
+      <main className="flex flex-1 items-center justify-center p-4">
+        <div className="relative box-border w-full max-w-[400px] rounded-[24px] bg-white px-8 pb-8 pt-14 shadow-md">
+          <div className="absolute left-1/2 top-0 z-10 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-[#67BFA1] shadow-lg">
+            <User size={34} strokeWidth={2.25} className="text-white" />
+          </div>
           <LoginForm />
         </div>
       </main>

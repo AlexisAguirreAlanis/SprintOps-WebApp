@@ -19,6 +19,11 @@ const roleNameMap = {
 
 const AuthContext = createContext(null);
 
+const clearStoredAuth = () => {
+  localStorage.removeItem('auth_user');
+  localStorage.removeItem('auth_permissions');
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const stored = localStorage.getItem("auth_user");
@@ -27,6 +32,8 @@ export const AuthProvider = ({ children }) => {
     }
     return null;
   });
+
+  const [authReady, setAuthReady] = useState(() => !localStorage.getItem('auth_user'));
 
   const [permissions, setPermissions] = useState(() => {
     const stored = localStorage.getItem("auth_permissions");
@@ -64,6 +71,49 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Si hay sesión guardada, comprobar que el usuario sigue existiendo en el backend
+  useEffect(() => {
+    let cancelled = false;
+    const stored = localStorage.getItem('auth_user');
+    if (!stored) {
+      setAuthReady(true);
+      return undefined;
+    }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(stored);
+    } catch {
+      clearStoredAuth();
+      setUser(null);
+      setPermissions({});
+      if (!cancelled) setAuthReady(true);
+      return undefined;
+    }
+    if (!parsed?.id) {
+      clearStoredAuth();
+      setUser(null);
+      setPermissions({});
+      if (!cancelled) setAuthReady(true);
+      return undefined;
+    }
+    (async () => {
+      try {
+        await apiClient.get(`/usuarios/${parsed.id}`);
+        if (!cancelled) setAuthReady(true);
+      } catch {
+        clearStoredAuth();
+        if (!cancelled) {
+          setUser(null);
+          setPermissions({});
+          setAuthReady(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Always re-fetch permissions on mount to stay in sync with backend
   useEffect(() => {
     if (user?.role) {
@@ -89,8 +139,7 @@ export const AuthProvider = ({ children }) => {
   }, [loadPermissions]);
 
   const logout = () => {
-    localStorage.removeItem("auth_user");
-    localStorage.removeItem("auth_permissions");
+    clearStoredAuth();
     setUser(null);
     setPermissions({});
   };
@@ -140,6 +189,7 @@ export const AuthProvider = ({ children }) => {
     login,
     completeOAuthLogin,
     logout,
+    authReady,
     isAuthenticated,
     checkPermission,
     refreshPermissions,

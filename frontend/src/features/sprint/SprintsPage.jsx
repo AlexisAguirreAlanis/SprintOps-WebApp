@@ -5,15 +5,17 @@ import {
   Box,
   CalendarDays,
   CheckCircle2,
-  CircleDot,
   Clock,
   FileText,
-  GitFork,
+  Presentation,
+  Spline,
+  Orbit,
   StickyNote,
   LayoutGrid,
   Layers,
   List,
   MoreHorizontal,
+  Plus,
   Settings,
   Target,
   Users,
@@ -31,15 +33,26 @@ import EmptyState from '../../components/ui/EmptyState';
 import Avatar from '../../components/Avatar';
 import { issuesRepository } from '../../data/repositories/issuesRepository';
 import { projectsRepository } from '../../data/repositories/projectsRepository';
+import { toast } from 'sonner';
 import { portfolioRepository } from '../../data/repositories/portfolioRepository';
+import CreateSheetModal from '../portfolio/CreateSheetModal';
+import { templateDocument } from '../portfolio/portfolioDocument';
 import ProjectNotes from './ProjectNotes';
+import ProjectScroll from '../home/ProjectScroll';
 import { formatShortDate, modeLabel, progressInfo } from '../home/projectModel';
 import { issueStatsBySprint, PROJECT_PHASE_LABEL, projectHubPhase } from './projectHub';
 import './projectHub.css';
 
+const SHEET_KINDS = {
+  document: { label: 'Documento', Icon: FileText },
+  slides: { label: 'Presentación', Icon: Presentation },
+  canvas: { label: 'Freeflow', Icon: Spline },
+};
+
+const sheetKind = (sheet) => SHEET_KINDS[sheet?.kind] || SHEET_KINDS.canvas;
+
 const TABS = [
   ['sprints', 'Sprints', Layers],
-  ['issues', 'Issues', CircleDot],
   ['documents', 'Documentos', FileText],
   ['notes', 'Notas', StickyNote],
   ['team', 'Equipo', Users],
@@ -51,13 +64,6 @@ const VIEWS = [
   ['grid', 'Vista de tarjetas', LayoutGrid],
   ['list', 'Vista de lista', List],
 ];
-
-const ISSUE_STATUS = {
-  todo: 'Por hacer',
-  in_progress: 'En progreso',
-  done: 'Finalizado',
-  blocked: 'Bloqueado',
-};
 
 const SprintsPage = () => {
   const { projectId } = useParams();
@@ -76,6 +82,8 @@ const SprintsPage = () => {
   const [issuesLoaded, setIssuesLoaded] = useState(false);
   const [members, setMembers] = useState(null);
   const [sheets, setSheets] = useState(null);
+  const [sheetModal, setSheetModal] = useState(false);
+  const [sheetBusy, setSheetBusy] = useState(false);
   const stageRef = useRef(null);
 
   const { checkPermission, user } = useAuth();
@@ -172,21 +180,61 @@ const SprintsPage = () => {
     navigate(`/sprint/${sprintId}`);
   };
 
+  const createProjectSheet = async (kind, name) => {
+    if (!user?.id || sheetBusy) return;
+    setSheetBusy(true);
+    try {
+      const templateId = kind === 'document' ? 'doc-blank' : kind === 'slides' ? 'slides-blank' : 'blank';
+      const built = templateDocument(templateId);
+      const sheet = await portfolioRepository.create({
+        userId: user.id,
+        projectId: Number(projectId),
+        name: name?.trim() || (templateId === 'blank' ? 'Sin título' : built.name),
+        document: built.document,
+      });
+      setSheetModal(false);
+      navigate(`/portafolio/${sheet.id}`);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo crear la hoja.');
+      setSheetBusy(false);
+    }
+  };
+
   return (
     <div className="ph">
       <header className="ph-head">
         <div className="ph-title">
           <BackButton to="/home" />
-          <span className="ph-mark" aria-hidden="true"><Box size={18} /></span>
-          <h1>{project.name}</h1>
+          <span className="ph-mark ph-mark--vista" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24">
+              <defs>
+                <mask id="ph-vista-cube">
+                  <rect width="24" height="24" fill="#fff" />
+                  <g fill="none" stroke="#000" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                    <path d="m3.3 7 8.7 5 8.7-5" />
+                    <path d="M12 22V12" />
+                  </g>
+                </mask>
+              </defs>
+              <path
+                fill="#fff"
+                mask="url(#ph-vista-cube)"
+                d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"
+              />
+            </svg>
+          </span>
+          <h1>Vista general</h1>
           <span className={`ph-status ph-status--${phase}`}>{PROJECT_PHASE_LABEL[phase] || 'Sin estado'}</span>
         </div>
         <div className="ph-actions">
-          <button type="button" className="ph-btn" onClick={() => navigate(`/project/${projectId}/timeline`)}>
-            <CalendarDays size={16} /> Calendario
+          <button type="button" className="ph-btn ph-btn--reveal" aria-label="Cronograma" onClick={() => navigate(`/project/${projectId}/timeline`)}>
+            <CalendarDays size={16} />
+            <span className="ph-btn-label"><span>Cronograma</span></span>
           </button>
-          <button type="button" className="ph-btn" onClick={() => navigate(`/project/${projectId}/universe`)}>
-            <GitFork size={16} className="rotate-180" /> Universo de Issues
+          <button type="button" className="ph-btn ph-btn--reveal" aria-label="Universo de issues" onClick={() => navigate(`/project/${projectId}/universe`)}>
+            <Orbit size={16} />
+            <span className="ph-btn-label"><span>Universo de issues</span></span>
           </button>
           <button
             type="button"
@@ -239,7 +287,7 @@ const SprintsPage = () => {
       </div>
 
       <div className="ph-stage" ref={stageRef}>
-        <div key={visibleTab} className={`ph-pane${leaving ? ' is-leaving' : ' is-entering'}${visibleTab === 'notes' ? ' is-notes' : ''}`}>
+        <div key={visibleTab} className={`ph-pane${leaving ? ' is-leaving' : ' is-entering'}${visibleTab === 'notes' ? ' is-notes' : ''}${visibleTab === 'documents' ? ' is-top' : ''}`}>
         {isLoading ? (
           <LoadingSpinner label="Cargando el proyecto..." />
         ) : visibleTab === 'sprints' ? (
@@ -268,32 +316,10 @@ const SprintsPage = () => {
               />
             </div>
           )
-        ) : visibleTab === 'issues' ? (
-          <section className="ph-panel">
-            <h2>Issues del proyecto</h2>
-            {!issuesLoaded ? (
-              <LoadingSpinner label="Cargando issues..." />
-            ) : issues.length === 0 ? (
-              <p className="ph-empty">Este proyecto todavía no tiene issues.</p>
-            ) : (
-              issues.map((issue) => (
-                <button
-                  key={issue.id}
-                  type="button"
-                  className="ph-row"
-                  onClick={() => issue.sprintId && navigate(`/sprint/${issue.sprintId}/issues`)}
-                >
-                  <strong>{issue.title || 'Issue sin título'}</strong>
-                  <span className={`ph-pill ph-pill--${issue.status === 'done' ? 'completed' : issue.status === 'in_progress' ? 'active' : 'planned'}`}>{ISSUE_STATUS[issue.status] || issue.status || 'Sin estado'}</span>
-                  <span>{sprints.find((sprint) => String(sprint.id) === String(issue.sprintId))?.name || 'Sin sprint'}</span>
-                  <span />
-                </button>
-              ))
-            )}
-          </section>
         ) : visibleTab === 'documents' ? (
+          <div className="ph-docs-scroll">
+          <ProjectScroll>
           <section className="ph-panel">
-            <h2>Documentos</h2>
             {sheets == null ? (
               <LoadingSpinner label="Cargando hojas..." />
             ) : projectSheets.length === 0 ? (
@@ -302,16 +328,34 @@ const SprintsPage = () => {
                 <button type="button" className="ph-linkish" onClick={() => navigate('/portafolio')}>Abrir portafolio</button>
               </p>
             ) : (
-              projectSheets.map((sheet) => (
-                <button key={sheet.id} type="button" className="ph-row" onClick={() => navigate(`/portafolio/${sheet.id}`)}>
-                  <strong>{sheet.name || 'Sin título'}</strong>
-                  <span>{sheet.elementCount || 0} elementos</span>
-                  <span>{formatShortDate(sheet.updatedAt) || ''}</span>
-                  <span />
-                </button>
-              ))
+              projectSheets.map((sheet) => {
+                const kind = sheetKind(sheet);
+                const KindIcon = kind.Icon;
+                return (
+                  <button key={sheet.id} type="button" className="ph-doc" onClick={() => navigate(`/portafolio/${sheet.id}`)}>
+                    <span className={`ph-doc-mark is-${sheet.kind || 'canvas'}`} aria-hidden="true">
+                      <KindIcon size={18} />
+                    </span>
+                    <span className="ph-doc-copy">
+                      <strong>{sheet.name || 'Sin título'}</strong>
+                      <span className="ph-doc-meta">
+                        <span>{kind.label}</span>
+                        <span>Creado {formatShortDate(sheet.createdAt) || '—'}</span>
+                        <span>Modificado {formatShortDate(sheet.updatedAt) || '—'}</span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })
+            )}
+            {sheets != null && (
+              <button type="button" className="ph-add ph-add--row" onClick={() => { setSheetBusy(false); setSheetModal(true); }}>
+                <Plus size={16} /> Agregar hoja
+              </button>
             )}
           </section>
+          </ProjectScroll>
+          </div>
         ) : visibleTab === 'notes' ? (
           <ProjectNotes projectId={projectId} userId={user?.id} />
         ) : visibleTab === 'team' ? (
@@ -412,6 +456,13 @@ const SprintsPage = () => {
           onUpdated={refetchProjects}
         />
       )}
+
+      <CreateSheetModal
+        open={sheetModal}
+        busy={sheetBusy}
+        onClose={() => { if (!sheetBusy) setSheetModal(false); }}
+        onCreate={createProjectSheet}
+      />
     </div>
   );
 };

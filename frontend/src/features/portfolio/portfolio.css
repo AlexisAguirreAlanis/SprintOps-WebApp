@@ -2682,7 +2682,7 @@ svg.pf-shape-mark.is-line path:last-child {
   background: #f8faf9;
   padding: 14px;
   text-align: left;
-  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
 }
 
 .pf-kind-card strong {
@@ -2705,11 +2705,24 @@ svg.pf-shape-mark.is-line path:last-child {
   padding-left: 16px;
 }
 
-.pf-kind-card.is-selected,
 .pf-kind-card:hover {
   border-color: #67bfa1;
-  box-shadow: 0 10px 24px rgb(103 191 161 / 18%);
-  transform: translateY(-2px);
+}
+
+.pf-kind-card.is-selected,
+.pf-kind-card.is-selected:hover {
+  border-color: #52a98a;
+  background: #67bfa1;
+}
+
+.pf-kind-card.is-selected strong,
+.pf-kind-card.is-selected p,
+.pf-kind-card.is-selected li {
+  color: #fff;
+}
+
+.pf-kind-card.is-selected li::marker {
+  color: rgb(255 255 255 / 0.85);
 }
 
 .pf-kind-art {
@@ -2735,6 +2748,28 @@ svg.pf-shape-mark.is-line path:last-child {
   background:
     radial-gradient(circle, #67bfa1 1.2px, transparent 1.4px) 0 0 / 14px 14px,
     #f4fbf8;
+}
+
+.pf-kind-card.is-selected .pf-kind-art {
+  background:
+    linear-gradient(rgb(255 255 255 / 0.92), rgb(255 255 255 / 0.92)) 0 0 / 100% 18px no-repeat,
+    repeating-linear-gradient(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.55) 2px, transparent 2px, transparent 16px);
+  color: #2f6f5e;
+}
+
+.pf-kind-card.is-selected .pf-kind-art[data-kind='slides'] {
+  background:
+    linear-gradient(#ffffff, #ffffff) center / 78% 70% no-repeat,
+    rgb(255 255 255 / 0.28);
+  box-shadow: none;
+  color: #2f6f5e;
+}
+
+.pf-kind-card.is-selected .pf-kind-art[data-kind='canvas'] {
+  background:
+    radial-gradient(circle, #fff 1.2px, transparent 1.4px) 0 0 / 14px 14px,
+    rgb(255 255 255 / 0.18);
+  color: #fff;
 }
 
 .pf-shape-tile {

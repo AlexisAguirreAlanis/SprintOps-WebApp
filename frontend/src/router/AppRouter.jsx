@@ -24,25 +24,46 @@ import TimeReportPage from '../features/time/TimeReportPage';
 import { useAuth } from '../features/auth/hooks/useAuth';
 
 const PrivateRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? children : <Navigate transition="none" to="/login" />;
+  const { isAuthenticated, authReady } = useAuth();
+  if (!authReady) return null;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return children;
+};
+
+const GuestRoute = ({ children }) => {
+  const { isAuthenticated, authReady } = useAuth();
+  if (!authReady) return null;
+  if (isAuthenticated) return <Navigate to="/home" replace />;
+  return children;
+};
+
+const RootEntry = () => {
+  const { isAuthenticated, authReady } = useAuth();
+  if (!authReady) return null;
+  return <Navigate to={isAuthenticated ? '/home' : '/login'} replace />;
 };
 
 const AppRouter = () => {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<RootEntry />} />
+      <Route
+        path="/login"
+        element={
+          <GuestRoute>
+            <LoginPage />
+          </GuestRoute>
+        }
+      />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route
-        path="/*"
         element={
           <PrivateRoute>
             <Layout />
           </PrivateRoute>
         }
       >
-        <Route index element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />
         <Route path="projects" element={<HomePage />} />
         <Route path="project/:projectId/sprints" element={<SprintsPage />} />

@@ -494,8 +494,20 @@ public class HojaService {
         dto.schemaVersion = hoja.getSchemaVersion();
         dto.preview = preview(hoja.getDocumento());
         dto.elementCount = dto.preview == null ? 0 : countElements(hoja.getDocumento());
+        dto.kind = documentKind(hoja.getDocumento());
         if (includeDocument) dto.document = hoja.getDocumento();
         return dto;
+    }
+
+    private String documentKind(String document) {
+        if (document == null || document.isBlank()) return "canvas";
+        try {
+            String kind = objectMapper.readTree(document).path("kind").asText("");
+            if ("document".equals(kind) || "slides".equals(kind) || "canvas".equals(kind)) return kind;
+        } catch (Exception ignored) {
+            return "canvas";
+        }
+        return "canvas";
     }
 
     private int countElements(String document) {

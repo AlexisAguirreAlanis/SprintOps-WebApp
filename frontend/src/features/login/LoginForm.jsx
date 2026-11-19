@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User, Mail, Lock } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../auth/hooks/useAuth';
@@ -46,6 +47,7 @@ const LoginForm = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [registerDone, setRegisterDone] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -92,39 +94,62 @@ const LoginForm = () => {
     window.location.href = `${API_ORIGIN}/oauth2/authorization/github`;
   };
 
-  return (
-    <div className="relative w-full">
-      <div className="absolute -top-[120px] left-1/2 -translate-x-1/2 w-[80px] h-[80px] bg-[#67BFA1] rounded-full flex items-center justify-center shadow-lg border-4 border-white z-10">
-        <User size={36} className="text-white" />
-      </div>
+  const fieldShell =
+    'flex h-[50px] w-full min-w-0 items-center gap-2.5 rounded-[10px] border border-[#dcdcdc] bg-[#f9f9f9] px-3.5 transition-shadow focus-within:ring-1 focus-within:ring-[#67BFA1]';
 
+  return (
+    <div className="w-full min-w-0">
       <form
         onSubmit={mode === 'login' ? handleLogin : handleRegister}
-        className="mt-8 space-y-[15px]"
+        className="space-y-[15px]"
       >
-        <div className="relative">
+        <div className={fieldShell}>
+          <Mail size={20} className="shrink-0 text-gray-400" aria-hidden />
           <input
             type="email"
+            name="email"
+            autoComplete="email"
             placeholder="Correo electrónico"
-            className="w-full h-[50px] px-[16px] rounded-[10px] border border-[#dcdcdc] bg-[#f9f9f9] text-base focus:outline-none focus:ring-1 focus:ring-[#67BFA1] transition-all"
+            className="login-field-input h-full min-w-0 flex-1 bg-transparent text-base text-[#312D2A] outline-none placeholder:text-gray-400"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <Mail size={24} className="absolute right-[16px] top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
         </div>
 
-        <div className="relative">
+        <div className={fieldShell}>
+          <Lock size={20} className="shrink-0 text-gray-400" aria-hidden />
           <input
-            type="password"
+            type={showPassword ? 'text' : 'password'}
+            name="password"
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             placeholder="Contraseña"
-            className="w-full h-[50px] px-[16px] rounded-[10px] border border-[#dcdcdc] bg-[#f9f9f9] text-base focus:outline-none focus:ring-1 focus:ring-[#67BFA1] transition-all"
+            className="login-field-input h-full min-w-0 flex-1 bg-transparent text-base text-[#312D2A] outline-none placeholder:text-gray-400"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={mode === 'register' ? 6 : undefined}
           />
-          <Lock size={24} className="absolute right-[16px] top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <button
+            type="button"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-black/[0.04] hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#67BFA1]"
+            onClick={() => setShowPassword((visible) => !visible)}
+            aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            aria-pressed={showPassword}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={showPassword ? 'off' : 'on'}
+                className="flex items-center justify-center"
+                initial={{ opacity: 0, scale: 0.6, rotate: showPassword ? 10 : -10 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.6, rotate: showPassword ? -10 : 10 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+              >
+                {showPassword ? <EyeOff size={20} strokeWidth={2} /> : <Eye size={20} strokeWidth={2} />}
+              </motion.span>
+            </AnimatePresence>
+          </button>
         </div>
 
         {mode === 'register' && (
@@ -191,6 +216,7 @@ const LoginForm = () => {
               setMode('register');
               setError('');
               setRegisterDone(null);
+              setShowPassword(false);
             }}
             className="text-[#67BFA1] font-bold text-sm underline-offset-2 hover:underline"
           >
@@ -203,6 +229,7 @@ const LoginForm = () => {
               setMode('login');
               setError('');
               setRegisterDone(null);
+              setShowPassword(false);
             }}
             className="text-[#67BFA1] font-bold text-sm underline-offset-2 hover:underline"
           >

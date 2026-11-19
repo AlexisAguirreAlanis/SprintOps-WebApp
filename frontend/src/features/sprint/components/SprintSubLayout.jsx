@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Activity, Plus, Target } from 'lucide-react';
+import { Activity, Columns2, Layers, Plus, RefreshCcw, Target } from 'lucide-react';
 import BackButton from '../../../components/ui/BackButton';
 import SprintTabs from '../../../components/ui/SprintTabs';
+import '../projectHub.css';
 import Modal from '../../../components/Modal';
 import CreateIssueModal from '../../issues/CreateIssueModal';
 import VelocityChart from '../../reflection/VelocityChart';
@@ -19,20 +20,18 @@ const SprintSubLayout = () => {
   const { checkPermission, refreshPermissionsForProject } = useAuth();
   const { issues, addIssue } = useIssues(id);
   const [showCreateIssue, setShowCreateIssue] = useState(false);
-  const [sprintName, setSprintName] = useState('');
   const [sprintRange, setSprintRange] = useState(null);
   const [projectId, setProjectId] = useState(null);
   const [projectMode, setProjectMode] = useState('agil');
   const [velocityModalOpen, setVelocityModalOpen] = useState(false);
   const [sprintIndicatorModalOpen, setSprintIndicatorModalOpen] = useState(false);
+  const openedMetrics = useRef(false);
 
   useEffect(() => {
-    setSprintName('');
     setSprintRange(null);
     setProjectId(null);
     setProjectMode('agil');
     sprintsRepository.getById(id).then(sprint => {
-      if (sprint?.name) setSprintName(sprint.name);
       setSprintRange(sprint ? { start: sprint.startDate || '', end: sprint.endDate || '' } : null);
       if (sprint?.projectId != null) setProjectId(sprint.projectId);
       if (sprint?.projectId) {
@@ -50,18 +49,18 @@ const SprintSubLayout = () => {
   const getHeaderInfo = () => {
     const path = location.pathname;
     if (path.includes('/planning')) {
-      return { title: 'Planeación', showButton: true, tab: 'planning' };
+      return { title: 'Planeación', Icon: Layers, showButton: true, tab: 'planning' };
     }
     if (path.includes('/issues')) {
-      return { title: 'Kanban', showButton: true, tab: 'issues' };
+      return { title: 'Kanban', Icon: Columns2, showButton: true, tab: 'issues' };
     }
     if (path.includes('/reflection')) {
-      return { title: 'Reflexión', showButton: false, tab: 'reflection' };
+      return { title: 'Reflexión', Icon: RefreshCcw, showButton: false, tab: 'reflection' };
     }
-    return { title: 'Sprint', showButton: false, tab: '' };
+    return { title: 'Sprint', Icon: Layers, showButton: false, tab: '' };
   };
 
-  const { title, showButton, tab } = getHeaderInfo();
+  const { title, Icon: HeaderIcon, showButton, tab } = getHeaderInfo();
   const outlet = useOutlet({ setShowCreateIssue, projectMode });
   const canCreateIssue = checkPermission('canCreateIssue');
   const canViewMetrics = checkPermission('canViewMetrics');
@@ -73,6 +72,14 @@ const SprintSubLayout = () => {
     }
   }, [tab]);
 
+  useEffect(() => {
+    if (openedMetrics.current || tab !== 'reflection') return;
+    if (location.state?.metrics && canViewMetrics) {
+      openedMetrics.current = true;
+      setVelocityModalOpen(true);
+    }
+  }, [tab, location.state, canViewMetrics]);
+
   const handleCreateIssue = (newIssue) => {
     addIssue({
       ...newIssue,
@@ -82,15 +89,15 @@ const SprintSubLayout = () => {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-10 bg-oracle-bg">
-      <div className="mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col overflow-hidden">
-        {/* ── Static Header (Does not move during transitions) ── */}
-        <header className="mb-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 sm:gap-4">
-          <div className="flex min-w-0 items-center gap-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[#F0EFED] px-7 pb-5 pt-[22px] text-[var(--app-text)]">
+      <div className="flex w-full min-h-0 flex-1 flex-col overflow-hidden">
+        <header className="mb-6 grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3 sm:gap-4">
+          <div className="ph-title min-w-0">
             <BackButton to={`/sprint/${id}`} />
-            <h1 className="truncate text-4xl font-black tracking-tight text-slate-800">
-              {title === 'Kanban' ? `${sprintName || `Sprint ${id}`}: ${title}` : title}
-            </h1>
+            <span className="ph-mark ph-mark--vista" aria-hidden="true">
+              <HeaderIcon size={18} />
+            </span>
+            <h1>{title}</h1>
           </div>
 
           <div className="flex justify-center">

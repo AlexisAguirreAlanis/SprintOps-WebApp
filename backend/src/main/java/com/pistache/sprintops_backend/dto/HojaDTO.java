@@ -24,6 +24,7 @@ public class HojaDTO {
     public String visibility;
     public boolean filterTeam;
     public int elementCount;
+    public String kind;
     public long revision;
     public int schemaVersion;
     public List<Map<String, Object>> preview;

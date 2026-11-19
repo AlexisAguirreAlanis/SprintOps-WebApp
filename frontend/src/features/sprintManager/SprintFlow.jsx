@@ -1,45 +1,69 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ListTodo, LayoutDashboard, RotateCcw, ChevronRight } from 'lucide-react';
-import SprintBlock from './SprintBlock';
+import { Check, ChevronRight, Columns2, Layers, RefreshCcw } from 'lucide-react';
 
-const SprintFlow = ({ sprintId, progress = 0 }) => {
+const SprintCard = ({ title, kicker, description, icon: Icon, done, progress, main, onClick }) => (
+  <button type="button" className={`sh-card${main ? ' sh-card--main' : ''}`} onClick={onClick}>
+    <div className="sh-card-top">
+      <span className="sh-glyph" aria-hidden="true">
+        <Icon size={22} />
+      </span>
+      <span className={`sh-check ${done ? 'sh-check--on' : 'sh-check--off'}`} aria-hidden="true">
+        {done ? <Check size={14} strokeWidth={3} /> : null}
+      </span>
+    </div>
+    <h2>{title}</h2>
+    <span className="sh-kicker">{kicker}</span>
+    <p>{description}</p>
+    <div className="sh-meter">
+      <div className="sh-bar" aria-hidden="true">
+        <span style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+      </div>
+      <b>{progress}%</b>
+    </div>
+  </button>
+);
+
+const Join = () => (
+  <span className="sh-join" aria-hidden="true">
+    <ChevronRight size={16} />
+  </span>
+);
+
+const SprintFlow = ({ sprintId, done = 0, total = 0, progress = 0, planningDone = false, reflectionDone = false }) => {
   const navigate = useNavigate();
-
-  const statusLabel = progress === 100 ? 'Completado' : 'En Progreso';
+  const backlogDone = total > 0 && done === total;
 
   return (
-    <div className="flex items-center gap-5 sm:gap-6 py-2">
-      <SprintBlock 
-        label="Planeación" 
-        vertical 
+    <div className="sh-flow">
+      <SprintCard
+        title="Planeación"
+        kicker="Backlog"
+        description="Definir objetivo, alcance y tareas del sprint."
+        icon={Layers}
+        done={planningDone}
+        progress={planningDone ? 100 : 0}
         onClick={() => navigate(`/sprint/${sprintId}/planning`)}
       />
-      
-      <div className="flex items-center justify-center shrink-0">
-        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-[#67BFA1] shadow-lg border border-gray-100 group">
-          <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-        </div>
-      </div>
-
-      <SprintBlock 
-        label="Product Backlog" 
-        isMain
-        icon={LayoutDashboard}
-        stats={`${statusLabel} — ${progress}% completado`}
+      <Join />
+      <SprintCard
+        main
+        title="Desarrollo"
+        kicker="Kanban"
+        description="Ejecutar y dar seguimiento a las tareas."
+        icon={Columns2}
+        done={backlogDone}
         progress={progress}
         onClick={() => navigate(`/sprint/${sprintId}/issues`)}
       />
-
-      <div className="flex items-center justify-center shrink-0">
-        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-[#67BFA1] shadow-lg border border-gray-100 group">
-          <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-        </div>
-      </div>
-
-      <SprintBlock 
-        label="Reflexión" 
-        vertical 
+      <Join />
+      <SprintCard
+        title="Reflexión"
+        kicker="Retrospectiva"
+        description="Evaluar resultados y aprendizajes."
+        icon={RefreshCcw}
+        done={reflectionDone}
+        progress={reflectionDone ? 100 : 0}
         onClick={() => navigate(`/sprint/${sprintId}/reflection`)}
       />
     </div>

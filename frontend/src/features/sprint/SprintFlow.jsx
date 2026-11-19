@@ -112,9 +112,10 @@ const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsF
         <button type="button" className={`ph-nav${atStart ? ' is-hidden' : ''}`} aria-label="Sprint anterior" aria-hidden={atStart} tabIndex={atStart ? -1 : 0} onClick={() => scrollToIndex(Math.max(0, activeIndex - 1))}>
           <ChevronLeft size={18} />
         </button>
+        <div className={`ph-rail${atStart ? '' : ' has-fade-left'}${atEnd ? '' : ' has-fade-right'}`}>
         <div
           ref={scrollerRef}
-          className={`ph-scroller${atStart ? '' : ' has-fade-left'}${atEnd ? '' : ' has-fade-right'}`}
+          className="ph-scroller"
           data-hide-scrollbar
         >
           <div className="ph-track">
@@ -139,6 +140,7 @@ const SprintFlow = ({ sprints, onSprintClick, projectId, layout = 'flow', statsF
               </>
             )}
           </div>
+        </div>
         </div>
         <button type="button" className={`ph-nav${atEnd ? ' is-hidden' : ''}`} aria-label="Sprint siguiente" aria-hidden={atEnd} tabIndex={atEnd ? -1 : 0} onClick={() => scrollToIndex(Math.min(sprints.length - 1, activeIndex + 1))}>
           <ChevronRight size={18} />

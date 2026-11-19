@@ -19,6 +19,7 @@ import ProjectGrid from './ProjectGrid';
 import ProjectListView from './ProjectListView';
 import ProjectCompactView from './ProjectCompactView';
 import ProjectScroll from './ProjectScroll';
+import ProjectPhaseTabs from './ProjectPhaseTabs';
 import FilterSelect from './FilterSelect';
 import CreateProjectModal from './CreateProjectModal';
 import JoinProjectModal from '../../components/ui/JoinProjectModal';
@@ -213,21 +214,7 @@ const HomePage = () => {
       </div>
 
       <div className="mb-4 flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="ps-tabs" role="tablist" aria-label="Filtrar por estado">
-          {PHASES.map((phase) => (
-            <button
-              key={phase.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === phase.id}
-              className={tab === phase.id ? 'is-active' : ''}
-              onClick={() => setTab(phase.id)}
-            >
-              {phase.label}
-              <span>{counts[phase.id] || 0}</span>
-            </button>
-          ))}
-        </div>
+        <ProjectPhaseTabs phases={PHASES} tab={tab} counts={counts} onChange={setTab} />
         <div className="flex items-center gap-2">
           <div className="relative" ref={sortRef}>
             <button
@@ -361,6 +348,7 @@ const HomePage = () => {
       </div>
 
       <ProjectScroll>
+        <div key={`${tab}-${activeView}`} className="ps-projects-stage">
         {isLoading ? (
           <div className={activeView === 'list' ? 'space-y-3' : 'grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3'}>
             {Array.from({ length: activeView === 'compact' ? 6 : 3 }, (_, index) => (
@@ -400,6 +388,7 @@ const HomePage = () => {
         ) : (
           <ProjectGrid projects={visible} onSelect={openProject} userId={user?.id} onCoverUpdated={refetch} />
         )}
+        </div>
       </ProjectScroll>
 
       <CreateProjectModal
